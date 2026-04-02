@@ -2622,6 +2622,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  sub_blob_mask=None,
                  coadd_headers={},
                  save_coadd_psf=False,
+                 wise_gaia_only=False,
                  mp=None,
                  record_event=None,
                  **kwargs):
@@ -2857,7 +2858,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     if not custom_brick:
         # not BRICK_PRIMARY
         maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(maskbits_type)
+        if wise_gaia_only:
+            maskbits |= MASKBITS['WISE_GAIA'] * np.logical_not(U).astype(maskbits_type)
         del U
+    else:
+        if wise_gaia_only:
+            maskbits |= MASKBITS['WISE_GAIA']
 
     # reference-catalog masks
     if refmap is not None:
@@ -3516,7 +3522,8 @@ def stage_wise_forced(
 
     return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps,
                 version_header=version_header,
-                wise_apertures_arcsec=wise_apertures_arcsec)
+                wise_apertures_arcsec=wise_apertures_arcsec,
+                wise_gaia_only=wise_gaia_only)
 
 
 def _fill_skipped_values(WISE, Nskipped, do_phot):

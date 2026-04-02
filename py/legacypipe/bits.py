@@ -98,6 +98,7 @@ MASKBITS = dict(
     SUB_BLOB   = 0x10000,
     RESOLVED   = 0x20000, # Within a local dwarf galaxy whose stars are resolved
     MCLOUDS    = 0x40000, # Within one of the Magellanic Clouds
+    WISE_GAIA  = 0x80000, # In a high-density brick; WISE forced photometry on Gaia sources only.
 )
 
 # Bits used internally for reference masks; these fit in a uint8,
@@ -140,6 +141,7 @@ MASKBITS_DESCRIPTIONS = [
     ('SUB_BLOB',  'large blobs broken up'),
     ('RESOLVED',  'local dwarf galaxy'),
     ('MCLOUDS',   'Magellanic Cloud'),
+    ('WISE_GAIA', 'WISE forced phot on Gaia stars only'),
 ]
 
 # This is signed, not unsigned, because int32 is a supported FITS data type, uint32 isn't really
