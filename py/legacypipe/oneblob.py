@@ -2124,6 +2124,7 @@ class OneBlob(object):
             if len(srctims) == 0:
                 # eg, bright Gaia stars from off the brick can end up here??
                 debug('No images overlap this source; skipping')
+                done_fitting[srci] = True
                 continue
 
             # Add this source's initial model back in.
