@@ -93,11 +93,7 @@ def stage_galex_forced(
     roiradec = [targetrd[0,0], targetrd[2,0], targetrd[0,1], targetrd[2,1]]
 
     # Sources to photometer
-    do_phot = np.ones(len(cat), bool)
-
-    for i,src in enumerate(cat):
-        if src is None:
-            do_phot[i] = False
+    do_phot = T.regular.copy()
 
     # Drop sources within the CLUSTER mask from forced photometry.
     Icluster = None
