@@ -603,7 +603,7 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-        if not np.all(B.done_fitting):
+        if not np.all(B.done_model_selection):
             if self.do_segmentation:
                 self.status('Computing segmentation map')
                 self.segmap = self.compute_segmentation_map(cat)
@@ -2523,8 +2523,9 @@ def _compute_source_metrics(srcs, tims, bands, tr, status):
 
             # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
-                status('Computing frac metrics: band %s (%i of %i), source %i of %i, metrics' %
-                       (band, iband+1, len(bands), isrc+1, len(srcs)))
+                if (isrc+1)%1000 == 0:
+                    status('Computing frac metrics: band %s (%i of %i), source %i of %i, metrics' %
+                           (band, iband+1, len(bands), isrc+1, len(srcs)))
                 if patch is None:
                     continue
                 slc = patch.getSlice(mod)
@@ -2575,8 +2576,9 @@ def _compute_source_metrics(srcs, tims, bands, tr, status):
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
             for isrc,patch in enumerate(srcmods):
-                status('Computing frac metrics: band %s (%i of %i), source %i of %i, rchi2' %
-                       (band, iband+1, len(bands), isrc+1, len(srcs)))
+                if (isrc+1)%1000 == 0:
+                    status('Computing frac metrics: band %s (%i of %i), source %i of %i, rchi2' %
+                           (band, iband+1, len(bands), isrc+1, len(srcs)))
                 if patch is None:
                     continue
                 slc = patch.getSlice(mod)
