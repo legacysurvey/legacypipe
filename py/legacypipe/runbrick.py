@@ -1450,6 +1450,7 @@ def stage_fitblobs(T=None,
         less_masking=less_masking,
         bright_masking=bright_masking,
         galaxy_masking=galaxy_masking,
+        checkpoint_period=checkpoint_period,
     )
     kwargs = dict(single_thread=single_thread,
                   halfdone_blob_map=halfdone_blob_map,
@@ -1457,6 +1458,10 @@ def stage_fitblobs(T=None,
 
     job_id_map_high = {}
     job_id_map_low = {}
+
+    # Save input half-done blobs here so that we pass them through to the output checkpoint.
+    blob_checkpoints = dict([((brickname, k), v) for k,v in halfdone_blob_map.items()])
+    new_blob_checkpoint = False
 
     if mp_hi is None:
         iter_hi = iter_deque(blob_meta, True, job_id_map_high, *args, **kwargs)
@@ -1504,14 +1509,16 @@ def stage_fitblobs(T=None,
             # Time to write a checkpoint file? (And have something to write?)
             tnow = CpuMeas()
             dt = tnow.wall_seconds_since(last_checkpoint)
-            if dt >= checkpoint_period and n_finished > 0:
+            if dt >= checkpoint_period and (n_finished > 0 or new_blob_checkpoint):
                 # Write checkpoint!
-                debug('Writing', n_finished, 'new results; total for this run', n_finished_total)
+                debug('Writing', n_finished, 'new results; total for this run', n_finished_total,
+                      'new_blob_checkpoint =', new_blob_checkpoint)
                 try:
-                    _write_checkpoint(R, checkpoint_filename)
+                    _write_checkpoint(R, blob_checkpoints, checkpoint_filename)
                     last_checkpoint = tnow
                     dt = 0.
                     n_finished = 0
+                    new_blob_checkpoint = False
                 except:
                     error('Failed to write checkpoint file', checkpoint_filename)
 
@@ -1546,6 +1553,19 @@ def stage_fitblobs(T=None,
             if Riter_hi is None and Riter_lo is None:
                 debug('Both iterators finished - done!')
                 break
+
+            for Riter in [Riter_hi, Riter_lo]:
+                if Riter is None:
+                    continue
+                chks = Riter.get_and_clear_checkpoints()
+                # Keep only the last checkpoint for each blob
+                for i,up in chks.items():
+                    print('Checkpoint for', i, '=', up[-1])
+                    up = up[-1]
+                    # "up" is a OneBlob object
+                    blob_checkpoints[(brickname, up.iblob)] = up
+                    info('Recorded checkpoint for', (brickname, up.iblob))
+                    new_blob_checkpoint = True
 
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
@@ -1614,6 +1634,15 @@ def stage_fitblobs(T=None,
                             pass
 
                 if r is not None:
+                    # If we got a result for a blob, clear any associated checkpoint for
+                    # that blob.
+                    if len(blob_checkpoints):
+                        brick = r['brickname']
+                        iblob = r['iblob']
+                        k = (brick, iblob)
+                        if k in blob_checkpoints:
+                            del blob_checkpoints[k]
+
                     R.append(r)
                     n_finished += 1
                     n_finished_total += 1
@@ -1636,7 +1665,7 @@ def stage_fitblobs(T=None,
                     continue
 
                 info('Writing checkpoints before exiting...')
-                _write_checkpoint(R, checkpoint_filename)
+                _write_checkpoint(R, blob_checkpoints, checkpoint_filename)
                 info('Wrote checkpoints')
                 info('terminating pool...')
                 mp.pool.terminate()
@@ -1648,7 +1677,7 @@ def stage_fitblobs(T=None,
 
         # Write checkpoint when done!
         info('Writing checkpoints...')
-        _write_checkpoint(R, checkpoint_filename)
+        _write_checkpoint(R, blob_checkpoints, checkpoint_filename)
         debug('Got %i results, wrote %i to checkpoint' % (n_finished_total, len(R)))
 
         pool_worker_pids = None
@@ -1942,8 +1971,6 @@ def print_running_jobs(Riter, job_id_map, job_status_map, procs_last):
         for u in up:
             if u.get('type', None) == 'progress':
                 latest = u.get('message', None)
-            # FIXME -- if we send mid-stream checkpoints, find those here.
-            #
         if latest is not None:
             job_status_map[i] = latest
     del updates
@@ -2078,13 +2105,17 @@ def _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick, blobslices):
     bailout_mask = bmap[blobmap+1]
     return bailout_mask
 
-def _write_checkpoint(R, checkpoint_filename):
+def _write_checkpoint(R, blob_checkpoints, checkpoint_filename):
     from astrometry.util.file import pickle_to_file, trymakedirs
     d = os.path.dirname(checkpoint_filename)
     if len(d) and not os.path.exists(d):
         trymakedirs(d)
     fn = checkpoint_filename + '.tmp'
-    pickle_to_file(R, fn)
+
+    blob_R = [dict(brickname=brick, iblob=blob, result=v)
+              for (brick,blob),v in blob_checkpoints.items()]
+
+    pickle_to_file(R + blob_R, fn)
     os.rename(fn, checkpoint_filename)
     debug('Wrote checkpoint to', checkpoint_filename)
 
@@ -2229,7 +2260,7 @@ def iter_deque(blob_meta, high_priority, job_id_map,
                 break
 
         iblob = task['iblob']
-        debug('High' if high_priority else 'Low', 'priority: blob', iblob)
+        #debug('High' if high_priority else 'Low', 'priority: blob', iblob)
         if task['size'] == -1:
             job_id_map[job_id] = (brickname, task['nblob_idx'])
             yield (brickname, iblob, None, None)

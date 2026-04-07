@@ -69,12 +69,26 @@ def status_update(s, force=False):
         update_process_status(dict(type='progress', message=s))
         _last_status_update = tnow
 
+def send_checkpoint(ob):
+    from legacypipe.trackingpool import send_process_checkpoint
+    info('Sending checkpoint')
+    send_process_checkpoint(ob)
+
+def maybe_checkpoint(ob):
+    if ob.checkpoint_period is None:
+        return
+    tnow = time.monotonic()
+    if tnow - ob.last_checkpoint > ob.checkpoint_period:
+        send_checkpoint(ob)
+        ob.last_checkpoint = tnow
+
 OneBlobArgs = namedtuple('OneBlobArgs', [
     'blobname', 'nblobs', 'iblob', 'Isrcs', 'brickwcs', 'bx0', 'by0', 'blobw', 'blobh', 'blobmask',
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies',
-    'halfdone', 'do_segmentation', 'bright_masking', 'galaxy_masking'])
+    'halfdone', 'do_segmentation', 'bright_masking', 'galaxy_masking',
+    'checkpoint_period'])
 
 def one_blob(args):
     '''
@@ -176,6 +190,9 @@ def one_blob(args):
         #     self.trargs.update(optimizer=ceres_optimizer)
 
         ob.trargs.update(optimizer=opt)
+
+        ob.checkpoint_period = args.checkpoint_period
+        ob.last_checkpoint = time.monotonic()
 
         B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative,
                    galaxy_masking=args.galaxy_masking,
@@ -330,6 +347,9 @@ class OneBlob(object):
                 plt.title('After subtracting frozen galaxies')
                 self.ps.savefig()
 
+    def __str__(self):
+        return 'OneBlob(%s)' % self.name
+
     def __getstate__(self):
         # Remove "tims" from the pickled object
         tims = self.tims
@@ -346,6 +366,7 @@ class OneBlob(object):
         self.debug(*args)
         status_update(self.prefix + (' ' if len(self.prefix) else '') +
                       ' '.join(str(s) for s in args), force=force)
+        maybe_checkpoint(self)
 
     def init_table(self, srcs, Isrcs):
         # Per-source measurements for this blob
@@ -603,7 +624,9 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-        if not np.all(B.done_model_selection):
+        if np.all(B.done_model_selection):
+            self.debug('Finished model selection for all sources')
+        else:
             if self.do_segmentation:
                 self.status('Computing segmentation map')
                 self.segmap = self.compute_segmentation_map(cat)
