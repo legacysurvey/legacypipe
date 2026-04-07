@@ -1641,6 +1641,7 @@ def stage_fitblobs(T=None,
                         iblob = r['iblob']
                         k = (brick, iblob)
                         if k in blob_checkpoints:
+                            debug('Got a blob result for', k, '- clearing blob-checkpoint')
                             del blob_checkpoints[k]
 
                     R.append(r)
@@ -2114,6 +2115,7 @@ def _write_checkpoint(R, blob_checkpoints, checkpoint_filename):
 
     blob_R = [dict(brickname=brick, iblob=blob, result=v)
               for (brick,blob),v in blob_checkpoints.items()]
+    debug('Saving checkpoints for blobs:', [(b['brickname'],b['iblob']) for b in blob_R])
 
     pickle_to_file(R + blob_R, fn)
     os.rename(fn, checkpoint_filename)
