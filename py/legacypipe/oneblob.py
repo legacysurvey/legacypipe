@@ -88,7 +88,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies',
     'halfdone', 'do_segmentation', 'bright_masking', 'galaxy_masking',
-    'checkpoint_period', 'blob_map'])
+    'checkpoint_period', 'blob_mp'])
 
 def one_blob(args):
     '''

@@ -127,7 +127,6 @@ def runbrick_init_worker_common():
 
 def runbrick_init():
     pass
->>>>>>> main
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
