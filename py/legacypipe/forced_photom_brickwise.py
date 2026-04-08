@@ -4,7 +4,7 @@ import numpy as np
 import fitsio
 from collections import Counter
 
-from legacypipe.utils import freeze_iers
+from legacypipe.utils import freeze_iers, RunbrickError
 freeze_iers()
 
 from legacypipe.forced_photom import forced_photom_one_ccd, find_missing_sga
@@ -94,7 +94,7 @@ def main():
     else:
         brick = catsurvey.get_brick_by_name(opt.brick)
         if brick is None:
-            raise RunbrickError('No such brick: "%s"' % brickname)
+            raise RunbrickError('No such brick: "%s"' % opt.brick)
         outfn = survey.find_file('tractor-forced', brick=opt.brick, output=True)
         print('Output filename:', outfn)
         #outfn = os.path.join(survey.output_dir, opt.brick[:3], 'tractor-forced-%s.fits' % opt.brick)
@@ -236,7 +236,7 @@ def main():
         hdr.delete(key)
 
     from legacypipe.survey import (
-        get_git_version, get_version_header, get_dependency_versions)
+        get_git_version, get_dependency_versions)
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
     gitver = get_git_version()
     hdr.add_record(dict(name='FORCEDV', value=gitver,

@@ -154,6 +154,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
             # Actually subtract the background!
             tim.data -= bg
+            tim.setImage(tim.data)
 
         # Floor the per-pixel variances,
         # and add Poisson contribution from sources
@@ -180,7 +181,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
             assert(np.all(np.isfinite(new_ie)))
             assert(np.all(new_ie >= 0.))
-            tim.inverr = new_ie
+            tim.setInvError(new_ie)
 
             # Expand a 3-pixel radius around weight=0 (saturated) pixels
             # from Eddie via crowdsource
@@ -194,6 +195,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             msat = binary_dilation(msat, dilate)
             nbefore = np.sum(tim.inverr == 0)
             tim.inverr[msat] = 0
+            tim.setInvError(tim.inverr)
             nafter = np.sum(tim.inverr == 0)
             debug('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
                   tile.coadd_id, 'band', band)
@@ -257,6 +259,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             du = binary_dilation(unique)
             tim.coadd_inverr = tim.inverr * du
         tim.inverr[unique == False] = 0.
+        tim.setInvError(tim.inverr)
         del xx,yy,rr,dd,unique
 
         if plots:
@@ -679,11 +682,10 @@ def unwise_tiles_touching_wcs(wcs, polygons=True):
     '''
     from astrometry.util.miscutils import polygons_intersect
     from astrometry.util.starutil_numpy import degrees_between
+    from legacypipe.utils import get_data_file
 
-    from pkg_resources import resource_filename
-    atlasfn = resource_filename('legacypipe', 'data/wise-tiles.fits')
-
-    T = fits_table(atlasfn)
+    with get_data_file('data', 'wise-tiles.fits') as atlasfn:
+        T = fits_table(atlasfn)
     trad = wcs.radius()
     wrad = np.sqrt(2.) / 2. * 2048 * 2.75 / 3600.
     rad = trad + wrad

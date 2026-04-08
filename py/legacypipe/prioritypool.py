@@ -1,14 +1,11 @@
+import queue
 import threading
 import multiprocessing
-from multiprocessing.pool import Pool, mapstar
-from legacypipe.trackingpool import TrackingPool, MyList, TrackingIMapUnorderedIterator
 
-from legacypipe.trackingpool import worker
-
-from multiprocessing.pool import (Pool, IMapUnorderedIterator, _PoolCache,
-                                  INIT, RUN, TERMINATE, MaybeEncodingError)
 from multiprocessing import get_context, util
-import queue
+from multiprocessing.pool import Pool, _PoolCache, mapstar, INIT, RUN, TERMINATE
+from legacypipe.trackingpool import (TrackingPool, MyList, TrackingIMapUnorderedIterator,
+                                     worker)
 
 # Two kinds of priority pools one could want:
 
@@ -24,10 +21,10 @@ import queue
 # - blob-parallel mode, where many blobs are being processed, and
 #   within that, non-overlapping sources are being processed in
 #   parallel in one big pool that is shared between the blobs.  You
-#   then have many imap_unordered() calls to fit_one and
+#   then have many imap_unordered() calls to fit_one() and
 #   model_select_one(); you want to pool them all together and have
 #   the GPU workers pull the high-priority calls, and the CPU workers
-#   pulling the low-priority calls (or, perhaps, the oldest, or some
+#   pull the low-priority calls (or, perhaps, the oldest, or some
 #   combination of priority terms).
 
 # --> In this case, you need to modify the Pool, because work items
@@ -72,9 +69,6 @@ import queue
 # workers always get the best task available at the moment.  This does
 # make it synchronous, though.
 
-'''
-Implements the second kind of priority pool discussed above.
-'''
 class PriorityPool(TrackingPool):
 
     def __init__(self, n_high_priority, n_low_priority,
@@ -141,11 +135,11 @@ class PriorityPool(TrackingPool):
         try:
             self._repopulate_pool()
         except Exception:
-            for worker in self._pool:
-                if worker.exitcode is None:
-                    worker.terminate()
-            for worker in self._pool:
-                worker.join()
+            for w in self._pool:
+                if w.exitcode is None:
+                    w.terminate()
+            for w in self._pool:
+                w.join()
             raise
 
         sentinels = self._get_sentinels()
@@ -302,6 +296,24 @@ class PriorityPool(TrackingPool):
                               for i,(p,arg) in enumerate(iterable)])
         return result
 
+    def imap_unordered(self, func, iterable):
+        self.priority_imap_unordered(func, [(0,x) for x in iterable])
+
+    def apply(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.apply()')
+    def map(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.map()')
+    def starmap(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.starmap()')
+    def starmap_async(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.starmap_async()')
+    def imap(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.imap()')
+    def apply_async(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.apply_async()')
+    def map_async(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.map_async()')
+
 # make it so we can reuse the worker() function from TrackingPool.  It gets work by
 # calling the _inqueue.get() method.  So fake that.
 class FakeInqueue(object):
@@ -310,9 +322,9 @@ class FakeInqueue(object):
         self.high = high
     def get(self):
         if self.high:
-            p,val = self.pq.get_high_priority()
+            _,val = self.pq.get_high_priority()
             return val
-        p,val = self.pq.get_low_priority()
+        _,val = self.pq.get_low_priority()
         return val
 
 from collections import deque
@@ -382,7 +394,7 @@ class MyArgs(object):
         return self.val
 
 def priority_work_generator(n):
-    for i in range(n):
+    for _ in range(n):
         p = np.random.randint(0, 1000)
         yield p, MyArgs(np.zeros(10, int) + p)
 

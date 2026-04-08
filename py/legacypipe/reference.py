@@ -1,6 +1,7 @@
 import os
 import warnings
 import numpy as np
+from collections import Counter
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 
@@ -24,7 +25,6 @@ def get_reference_sources(survey, targetwcs, bands,
                           galaxy_margin=None):
     # If bands = None, does not create sources.
     from astrometry.libkd.spherematch import match_radec
-    from collections import Counter
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
@@ -82,6 +82,74 @@ def get_reference_sources(survey, targetwcs, bands,
                                        max_radius=galaxy_margin)
         if galaxies is not None:
             # Resolve possible Gaia-large-galaxy duplicates
+            if gaia and len(gaia) and ('ref_cat' in galaxies.get_columns()):
+                # The SGA 2025 "ellipse" catalogs contain:
+                #  - "SGA sources" -- ref_cat = "L4", ref_id = SGA id; type can be anything including PSF
+                #  - Gaia sources  -- ref_cat = "G3", ref_id = Gaia sourceid; type can be anything
+                #  - other sources -- ref_cat = " " (yes, single space), ref_id = 0; type anything
+                #  - it does NOT contain "DUP" entries (Gaia/SGA collisions)
+                #
+                # The "SGA" and "other" sources we want to keep as-is.
+                #
+                # The "Gaia" sources, we want to keep their catalog
+                # properties (TYPE, SHAPEs, FLUXes), BUT we want to
+                # merge them with the rest of the Gaia properties from
+                # the Gaia catalog (PHOT_G_MEAN_MAG, etc etc).
+                #
+                # We'll do this by pulling values from the Gaia
+                # catalog into the SGA catalog, and then dropping the
+                # Gaia entries.
+                #
+                debug('Merging SGA and Gaia entries...')
+
+                # FIXME - I just hard-coded Gaia DR3 for simplicity
+                Igal = np.flatnonzero(galaxies.ref_cat == 'G3')
+                assert(np.all(gaia.ref_cat == 'G3'))
+                if len(Igal):
+                    sga_cols = galaxies.get_columns()
+                    gaia_cols = gaia.get_columns()
+                    # Initialize the "galaxies" table with zeroed Gaia columns
+                    for c in gaia_cols:
+                        if not c in sga_cols:
+                            galaxies.set(c, np.zeros(len(galaxies), gaia.get(c).dtype))
+
+                    # Match by Gaia source id (ref_id)
+                    refidmap = dict([(refid,i) for i,refid in enumerate(gaia.ref_id)])
+                    Igaia = np.empty(len(Igal), int)
+                    Igaia[:] = -1
+                    for j,refid in enumerate(galaxies.ref_id[Igal]):
+                        # not all will be found because of, eg, different search radii
+                        try:
+                            Igaia[j] = refidmap[refid]
+                        except KeyError:
+                            continue
+                    del refidmap
+                    K = np.flatnonzero(Igaia > -1)
+                    info('Plugging in Gaia catalog values for', len(K), 'SGA sources')
+                    Igal = Igal[K]
+                    Igaia = Igaia[K]
+                    del K
+                    if len(Igal):
+                        # Copy the Gaia catalog values over to the SGA table.
+                        for c in gaia_cols:
+                            if not c in sga_cols:
+                                galaxies.get(c)[Igal] = gaia.get(c)[Igaia]
+                        # Set their REF_CAT back to Gaia.
+                        galaxies.ref_cat[Igal] = gaia.ref_cat[Igaia]
+                        # Grab the GaiaPositions and plug them into the SGA sources.
+                        for igal,igaia in zip(Igal, Igaia):
+                            gal = galaxies.sources[igal]
+                            gaiasrc = gaia.sources[igaia]
+                            if gal is not None and gaiasrc is not None:
+                                gal.pos = gaiasrc.pos
+                        # Now drop these entries from the Gaia table.
+                        keep = np.ones(len(gaia), bool)
+                        keep[Igaia] = False
+                        gaia.cut(keep)
+                        del keep
+                    del Igaia
+                del Igal
+
             if gaia and len(gaia):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
                                     2./3600., nearest=True)
@@ -132,7 +200,6 @@ def get_reference_sources(survey, targetwcs, bands,
     refs.cut((xx > -keeprad) * (xx < W+keeprad) *
              (yy > -keeprad) * (yy < H+keeprad))
     debug('Cut to', len(refs), 'touching this brick')
-    from collections import Counter
     debug('ref_cats:', Counter(refs.ref_cat))
     # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
@@ -294,7 +361,23 @@ def fix_gaia(gaia, bands):
     # And made far more restrictive following BGS feedback.
     # Then, for Gaia-EDR3, Rongpu found we no longer need to look at
     # astrometric_excess_noise.
-    gaia.pointsource = (gaia.G <= 18.)
+    # Then, 2026-01-31, Dustin suggested we could also use significant proper motions to force PSF.
+    # Then, 2026-02-25, John notes that some compact, bright ellipticals are getting flagged;
+    # DJS suggests the current scheme!
+    with np.errstate(invalid='ignore', divide='ignore'):
+        pm_snr = np.hypot(gaia.pmra  / gaia.pmra_error,
+                          gaia.pmdec / gaia.pmdec_error)
+        parallax_snr = gaia.parallax / gaia.parallax_error
+    pm_snr[np.logical_not(np.isfinite(pm_snr))] = 0.
+    parallax_snr[np.logical_not(np.isfinite(parallax_snr))] = 0.
+
+    gaia.pointsource = ((gaia.G < 13.) |
+                        ((gaia.G < 18.) & (gaia.astrometric_excess_noise < 1.)) |
+                        (pm_snr > 5.) |
+                        (parallax_snr > 5.))
+    info('Gaia pointsource: %i have G<13; %i have G<18 and AEN<1; %i have pm_snr > 5; %i have parallax_snr > 5; %i total' %
+         (np.sum(gaia.G < 18.), np.sum((gaia.G < 18.) & (gaia.astrometric_excess_noise < 1.)),
+          np.sum(pm_snr > 5), np.sum(parallax_snr > 5), np.sum(gaia.pointsource)))
 
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
@@ -500,8 +583,7 @@ def get_large_galaxy_version(fn):
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         extra_columns=None,
                         max_radius=None):
-    from astrometry.util.starutil_numpy import degrees_between
-    from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
+    from legacypipe.bits import SGA_FITMODE
 
     # max_radius (in deg) should be the largest radius in the SGA catalog!
     if max_radius is None:
@@ -511,7 +593,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     brick_radius = targetwcs.radius()
     max_radius += brick_radius
 
-    galaxies = read_sga(survey, rc, dc, brick_radius, max_radius)
+    galaxies = read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius)
     if galaxies is None:
         return None
 
@@ -537,7 +619,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
 
     return galaxies
 
-def read_sga(survey, rc, dc, brick_radius, max_radius):
+def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
     from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
     from functools import reduce
@@ -616,15 +698,18 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
         galaxies.fitmode = np.zeros(len(galaxies), sga_fitmode_type)
 
     galaxies.ignore_source = np.zeros(len(galaxies), bool)
-    galaxies.ref_cat = np.array([refcat] * len(galaxies))
+    if 'ref_cat' in galaxies.get_columns():
+        info('SGA catalog already has ref_cat, with entries:', Counter(galaxies.ref_cat))
+    else:
+        galaxies.ref_cat = np.array([refcat] * len(galaxies))
 
     if is_ellipse:
-        print('SGA ellipse catalog')
+        debug('SGA ellipse catalog')
         # SGA ellipse catalog
         if has_fitmode:
-            print('Has fitmode')
+            debug('SGA ellipse catalog has fitmode')
             # SGA-2025
-            galaxies.islargegalaxy = (galaxies.ref_id > -1)
+            galaxies.islargegalaxy = np.array([c.startswith('L') for c in galaxies.ref_cat])
             galaxies.freezeparams = ((galaxies.fitmode & SGA_FITMODE['FREEZE']) != 0)
 
             galaxies.set_galaxy_maskbit = reduce(np.logical_or, [
@@ -638,7 +723,7 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
             galaxies.ignore_source |= ((galaxies.fitmode & SGA_FITMODE['FIXGEO']) != 0)
 
         else:
-            print('No fitmode -- SGA-2020?')
+            info('SGA catalog has no fitmode -- SGA-2020?')
             # SGA-2020
             # NOTE: fields such as ref_cat, preburned, etc, already exist in the
             # "galaxies" catalog read from disk.
@@ -653,18 +738,18 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
             galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
 
             galaxies.set_galaxy_maskbit = galaxies.islargegalaxy
-            
+
             # set ref_cat and ref_id for galaxies outside the footprint
             I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
             galaxies.ref_id[I] = galaxies.sga_id[I]
 
     else:
-        print('SGA parent catalog')
+        debug('SGA parent catalog')
         # SGA parent catalog.
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
 
         if has_fitmode:
-            print('Has fitmode')
+            debug('SGA parent catalog has fitmode')
             # SGA-2025
             # The fitmode FREEZE bit is not allowed in the parent catalog
             assert(np.all((galaxies.fitmode & SGA_FITMODE['FREEZE']) == 0))
@@ -677,8 +762,18 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
             # appear in the output catalog.
             galaxies.ignore_source |= ((galaxies.fitmode & SGA_FITMODE['FIXGEO']) != 0)
 
+            # SGA entries outside the current brick/region should also
+            # get the ignore_source treatment.
+            _,xx,yy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
+            xx = np.round(xx-1.).astype(np.int32)
+            yy = np.round(yy-1.).astype(np.int32)
+            H,W = targetwcs.shape
+            in_bounds = ((xx >= 0) * (xx < W) *
+                         (yy >= 0) * (yy < H))
+            galaxies.ignore_source |= ~in_bounds
+
         else:
-            print('No fitmode -- SGA-2020?')
+            info('SGA parent catalog has no fitmode -- SGA-2020?')
             # SGA-2020
             galaxies.islargegalaxy = np.ones(len(galaxies), bool)
             galaxies.freezeparams = np.zeros(len(galaxies), bool)
@@ -756,8 +851,8 @@ def get_galaxy_sources(galaxies, bands):
 
     # awful
     is_ellipse_cat = ('sersic' in cols)
-    print('Ellipse cat?', is_ellipse_cat)
-    print('bands', bands)
+    info('Reading SGA %s cat with bands %s' %
+         ('ellipse' if is_ellipse_cat else 'parent', ', '.join(bands)))
 
     if is_ellipse_cat:
         # The LogRadius and EllipseWithPriors classes have a minimum log-radius (log(0.01))
@@ -821,7 +916,7 @@ def get_galaxy_sources(galaxies, bands):
             # this catches Rex too
             elif issubclass(typ, (DevGalaxy, ExpGalaxy)):
                 src = typ(pos, bright, shape)
-            elif issubclass(typ, (SersicGalaxy)):
+            elif issubclass(typ, SersicGalaxy):
                 assert(np.isfinite(g.sersic))
                 sersic = LegacySersicIndex(g.sersic)
                 src = typ(pos, bright, shape, sersic)
@@ -834,7 +929,6 @@ def get_galaxy_sources(galaxies, bands):
             srcs[ii] = src
 
     else:
-        print('SGA parent - sources')
         for ii,g in enumerate(galaxies):
             # Initialize each source with an exponential disk--
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
@@ -875,12 +969,13 @@ def read_star_clusters(targetwcs):
     legacypipe/bin/build-cluster-catalog.py.
 
     """
-    from pkg_resources import resource_filename
+    from legacypipe.utils import get_data_file
     from astrometry.util.starutil_numpy import degrees_between
 
-    clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
-    debug('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
+    with get_data_file('data', 'NGC-star-clusters.fits') as clusterfile:
+        clusterfile = str(clusterfile)
+        debug('Reading {}'.format(clusterfile))
+        clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
     clusters.ref_id = np.arange(len(clusters))
 
     assert(np.all(np.isfinite(clusters.radius)))
@@ -914,7 +1009,6 @@ def get_reference_map(wcs, refs):
     pixscale = wcs.pixel_scale()
     cd = wcs.cd
     cd_pix = np.reshape(cd, (2,2)) / (pixscale / 3600.)
-    #debug('Scaled CD matrix:', cd_pix)
 
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright',           'BRIGHT',   False),
@@ -936,7 +1030,6 @@ def get_reference_map(wcs, refs):
         if len(I) == 0:
             continue
         thisrefs = refs[I]
-
         radius_pix = np.ceil(thisrefs.radius * 3600. / pixscale).astype(np.int32)
 
         if bit == 'BRIGHT':
@@ -972,33 +1065,15 @@ def get_reference_map(wcs, refs):
                 du = cd_pix[0][0] * dx + cd_pix[0][1] * dy
                 dv = cd_pix[1][0] * dx + cd_pix[1][1] * dy
                 debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', rpix)
-                # debug('corners:')
-                # debug('dx:', dx[0,0], dx[0,-1], dx[-1,0], dx[-1,-1])
-                # debug('dy:', dy[0,0], dy[0,-1], dy[-1,0], dy[-1,-1])
-                # debug('r(x,y):',
-                #       np.hypot(dx[0,0], dy[0,0]), np.hypot(dx[0,-1], dy[0,-1]),
-                #       np.hypot(dx[-1,0], dy[-1,0]), np.hypot(dx[-1,-1], dy[-1,-1]))
-                # debug('du:', du[0,0], du[0,-1], du[-1,0], du[-1,-1])
-                # debug('dv:', dv[0,0], dv[0,-1], dv[-1,0], dv[-1,-1])
-                # debug('r(u,v):',
-                #       np.hypot(du[0,0],   dv[0,0]), np.hypot(du[0,-1],  dv[0,-1]),
-                #       np.hypot(du[-1,0],  dv[-1,0]), np.hypot(du[-1,-1], dv[-1,-1]))
                 if not np.isfinite(ref.pa):
                     ref.pa = 0.
                 ct = np.cos(np.deg2rad(90.+ref.pa))
                 st = np.sin(np.deg2rad(90.+ref.pa))
                 v1 = ct * du + -st * dv
                 v2 = st * du +  ct * dv
-                # debug('v1:', v1[0,0], v1[0,-1], v1[-1,0], v1[-1,-1])
-                # debug('v2:', v2[0,0], v2[0,-1], v2[-1,0], v2[-1,-1])
-                # debug('r(v1,v2):',
-                #       np.hypot(v1[0,0],   v2[0,0]), np.hypot(v1[0,-1],  v2[0,-1]),
-                #       np.hypot(v1[-1,0],  v2[-1,0]), np.hypot(v1[-1,-1], v2[-1,-1]))
                 r1 = float(rpix)
                 r2 = float(rpix) * ref.ba
                 masked = (v1**2 / r1**2 + v2**2 / r2**2 < 1.)
-                #e = (v1**2 / r1**2 + v2**2 / r2**2)
-                #debug('ellipse ratio:', e[0,0], e[0,-1], e[-1,0], e[-1,-1])
                 debug('Masking', np.sum(masked), 'of', len(v1.flat), 'pixels')
             refmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
     return refmap

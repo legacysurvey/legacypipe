@@ -1,6 +1,5 @@
 import os
 import tempfile
-import time
 import shutil
 import fitsio
 import numpy as np
@@ -29,7 +28,7 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
     realoutfn = relpath.replace('-photom.fits', '-scamp.fits')
 
     rtn = realoutfn
-    
+
     tmpoutfn  = os.path.join(scamp_dir, tmpoutfn)
     realoutfn = os.path.join(scamp_dir, realoutfn)
     if os.path.exists(realoutfn):
@@ -74,29 +73,25 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
     astropy_img_fits = None
     primhdr = None
     for ccd in ccds:
-        I1 = np.flatnonzero((P.ccdname == ccd))
+        #I1 = np.flatnonzero((P.ccdname == ccd))
         I2 = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0))
         #print('  CCD', ccd, ':', len(I), 'stars, 10/50/90th pct S/N:', ', '.join(['%.1f' % p for p in np.percentile(P.sn[I], [10,50,90])]))
         I = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0) * (P.sn > 5.))
         #print('CCD', ccd, ':', len(I1), 'in CCD,', len(I2), 'with Gaia RA,', len(I), 'with S/N > 5.  Median S/N %.1f' % np.median(P.sn[I2]))
         ngood.append(len(I))
         try:
-            t0 = time.time()
             imghdr = fitsio.read_header(imgfn, ext=ccd)
-            #print('Reading image header with fitsio:', time.time()-t0)
             w,h = imghdr['ZNAXIS1'], imghdr['ZNAXIS2']
         except:
             # Older images, eg cfht-s82-u/931347p.fits.fz, suffer from
             # https://github.com/esheldon/fitsio/issues/324
             # Try reading with astropy.
             from astropy.io import fits as afits
-            t0 = time.time()
             if astropy_img_fits is None:
                 astropy_img_fits = afits.open(imgfn)
             hdu = astropy_img_fits[ccd]
             h,w = hdu.shape
             imghdr = hdu.header
-            #print('Reading image header with astropy:', time.time()-t0)
         newhdr['EXTNAME'] = ccd
         for c in ['QRUNID']:
             newhdr[c] = imghdr[c]

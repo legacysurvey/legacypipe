@@ -2,32 +2,38 @@ import numpy as np
 
 import logging
 logger = logging.getLogger('legacypipe.halos')
-# def info(*args):
-#     from legacypipe.utils import log_info
-#     log_info(logger, args)
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
 def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
 def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True,
-                   old_calibs_ok=False):
-    args = [(itim, tim, refs, moffat, old_calibs_ok) for itim,tim in enumerate(tims)]
+                   old_calibs_ok=False, radius_scaling=1.0):
+    args = [(itim, tim, refs, moffat, old_calibs_ok, radius_scaling)
+            for itim,tim in enumerate(tims)]
     haloimgs = mp.imap_unordered(subtract_one, args)
     for itim,h in haloimgs:
         tims[itim].data -= h
+        tims[itim].setImage(tims[itim].data)
 
 def subtract_one(X):
-    itim, tim, refs, moffat, old_calibs_ok = X
+    itim, tim, refs, moffat, old_calibs_ok, radius_scaling = X
     if tim.imobj.camera != 'decam':
-        print('Warning: Stellar halo subtraction is only implemented for DECam')
+        info('Warning: Stellar halo subtraction is only implemented for DECam')
         return itim, 0.
     col = 'decam_mag_%s' % tim.band
     if not col in refs.get_columns():
-        print('Warning: no support for halo subtraction in band %s' % tim.band)
+        info('Warning: no support for halo subtraction in band %s' % tim.band)
         return itim, 0.
     return itim, decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
                                   tim.imobj.pixscale, tim.band, tim.imobj, moffat,
-                                  old_calibs_ok=old_calibs_ok)
+                                  old_calibs_ok=old_calibs_ok,
+                                  radius_scaling=radius_scaling)
 
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
@@ -36,32 +42,32 @@ def moffat(rr, alpha, beta):
 # Coefficients used in decam_halo_model.  The keys are also used to decide
 # which filters are supported (hence the zero entry for z)
 decam_outer_halo_coeffs = dict(
-    g = 0.00045,
-    r = 0.00033,
-    i = 0.00033,
-    z = 0.0,
-    M411 = 0.00065,
-    M438 = 0.0006,
-    M464 = 0.00055,
-    M490 = 0.0005,
-    M517 = 0.00045,
+    g = [0.00045, -2],
+    r = [0.00033, -2],
+    i = [0.00033, -2],
+    z = [0.0, 0.0],
+    M411 = [0.00027125, -1.6901],
+    M438 = [0.00023144, -1.6375],
+    M464 = [0.00017692, -1.6324],
+    M490 = [0.00016855, -1.5664],
+    M517 = [0.00013529, -1.5163],
     )
 
 def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
-                     old_calibs_ok=False):
+                     old_calibs_ok=False, radius_scaling=1.0):
     from legacypipe.survey import radec_at_mjd
     assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
                          refs.pmra, refs.pmdec, refs.parallax, mjd)
     if band not in decam_outer_halo_coeffs.keys():
-        print('No halo subtraction for band', band)
+        warning('No halo subtraction for band', band)
         return 0.
     col = 'decam_mag_%s' % band
     if not col in refs.get_columns():
-        print('No reference mag was computed for band', band, 'so no halo subtraction can be done')
+        warning('No reference mag was computed for band', band, 'so no halo subtraction can be done')
         return 0.
     mag = refs.get(col)
-    good = np.flatnonzero(mag != 0.)
+    good = np.flatnonzero((mag != 0.) * (refs.radius > 0))
     fluxes = 10.**((mag - 22.5) / -2.5)
 
     have_inner_moffat = False
@@ -74,6 +80,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
             debug('Read inner Moffat parameters', (inner_alpha, inner_beta),
                   'from PsfEx file')
 
+    debug('Halo subtraction: applying radius scaling of %.2f' % radius_scaling)
     H,W = wcs.shape
     H = int(H)
     W = int(W)
@@ -85,9 +92,11 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
 
         rad_arcsec = ref.radius * 3600.
         # We subtract halos out to N x their masking radii.
-        rad_arcsec *= 4.0
+        rad_arcsec *= 8.0
         # Rongpu says only apply within:
         rad_arcsec = np.minimum(rad_arcsec, 400.)
+        # Extra scaling factor (LS DR11=1.0 vs IBIS DR1=2.0)
+        rad_arcsec *= radius_scaling
         pixrad = int(np.ceil(rad_arcsec / pixscale))
 
         xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
@@ -137,9 +146,9 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
                                            moffat(rads*pixscale, alpha, beta) * pixscale**2)
 
         else:
-             f = decam_outer_halo_coeffs[band]
+             f, exp = decam_outer_halo_coeffs[band]
 
-             halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
+             halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**exp
                                             * pixscale**2)
 
         if have_inner_moffat:

@@ -15,6 +15,11 @@ from legacypipe.utils import EllipseWithPriors, galaxy_min_re
 
 import logging
 logger = logging.getLogger('legacypipe.survey')
+def error(*args):
+    from legacypipe.utils import log_error
+    log_error(logger, args)
+    import traceback
+    traceback.print_exc()
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -344,74 +349,31 @@ def get_git_version(dirnm=None):
     -------
     Git version string
     '''
-    from astrometry.util.run_command import run_command
-    cmd = ''
+    import subprocess
+
     if dirnm is None:
-        # Get the git version of the legacypipe product
         import legacypipe
         dirnm = os.path.dirname(legacypipe.__file__)
 
-    cmd = "cd '%s' && git describe" % dirnm
-    rtn,version,err = run_command(cmd)
-    if rtn:
-        raise RuntimeError('Failed to get version string (%s): ' % cmd +
-                           version + err)
-    version = version.strip()
-    return version
+    try:
+        p = subprocess.run(
+            ['git', '-C', dirnm, 'describe'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            close_fds=True)
+    except Exception as e:
+        raise RuntimeError(f"Failed to invoke git: {e}")
 
-def get_version_header(program_name, survey_dir, release, git_version=None,
-                       proctype='tile'):
+    if p.returncode != 0:
+        out = (p.stdout or '').strip()
+        err = (p.stderr or '').strip()
+        raise RuntimeError(
+            f"Failed to get version string (git -C '{dirnm}' describe): {out} {err}"
+        )
 
-    '''
-    Creates a fitsio header describing a DECaLS data product.
-    '''
-    import datetime
-    import socket
-
-    if program_name is None:
-        import sys
-        program_name = sys.argv[0]
-
-    if git_version is None:
-        git_version = get_git_version()
-
-    hdr = fitsio.FITSHDR()
-    for s in [
-        'Data product of the DESI Imaging Legacy Surveys',
-        'Full documentation at http://legacysurvey.org',
-        ]:
-        hdr.add_record(dict(name='COMMENT', value=s, comment=s))
-    hdr.add_record(dict(name='LEGPIPEV', value=git_version,
-                        comment='legacypipe git version'))
-    hdr.add_record(dict(name='LSDIR', value=survey_dir,
-                        comment='$LEGACY_SURVEY_DIR directory'))
-    hdr.add_record(dict(name='LSDR', value='DR11',
-                        comment='Data release number'))
-    hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
-                        comment='The LegacySurveys'))
-    # Requested by NOIRLab
-    hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
-                        comment='Survey names'))
-    if release is not None:
-        hdr.add_record(dict(name='DRVERSIO', value=release,
-                            comment='LegacySurveys Data Release number'))
-    hdr.add_record(dict(name='OBSTYPE', value='object',
-                        comment='Observation type'))
-    hdr.add_record(dict(name='PROCTYPE', value=proctype,
-                        comment='Processing type'))
-
-    # These make the output data products not bitwise reproducible...
-    # hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
-    #                     comment='%s run time' % program_name))
-    # hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
-    #                     comment='Machine where script was run'))
-    # hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
-    #                     comment='NERSC machine where script was run'))
-    # hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
-    #                     comment='SLURM job id'))
-    # hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
-    #                     comment='SLURM job array id'))
-    return hdr
+    return p.stdout.strip()
 
 def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
                             mpl=True):
@@ -422,7 +384,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import photutils
     import tractor
     import scipy
-    import unwise_psf
 
     depvers = []
     headers = []
@@ -439,8 +400,14 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
         ('photutils', photutils),
         ('scipy', scipy),
         ('tractor', tractor),
-        ('unwise_psf', unwise_psf),
     ])
+    try:
+        import unwise_psf
+        pkgs.append(
+            ('unwise_psf', unwise_psf))
+    except ImportError:
+        print('Warning: failed to load package unwise_psf to get version string')
+
     for name,pkg in pkgs:
         if pkg is None:
             depvers.append((name, 'none'))
@@ -501,10 +468,16 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
 def tim_get_resamp(tim, targetwcs):
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
+    wcs_hash = hash(targetwcs)
     if hasattr(tim, 'resamp'):
-        return tim.resamp
+        if hasattr(tim, 'targetwcs_hash'):
+            if hash(tim.targetwcs_hash) == wcs_hash:
+                #debug(f'Re-using previous resamp with hash {wcs_hash=}')
+                return tim.resamp
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)
+        tim.resamp = Yo,Xo,Yi,Xi
+        tim.targetwcs_hash = wcs_hash
     except OverlapError:
         debug('No overlap between tim', tim.name, 'and target WCS')
         return None
@@ -970,7 +943,7 @@ class FITSWrapper(fitsio.FITS):
                 tilew = find_tile_size(W, default_tile_size)
                 tileh = find_tile_size(H, default_tile_size)
                 kw.update(tile_dims=(tileh, tilew))
-        debug('Writing FITS image with kwargs', kw)
+        #debug('Writing FITS image with kwargs', kw)
         return super().write_image(img, **kw)
 
 class LegacySurveyData(object):
@@ -1150,6 +1123,9 @@ class LegacySurveyData(object):
     def get_default_release(self):
         return None
 
+    def get_halo_kwargs(self):
+        return {}
+
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
         return None
@@ -1162,6 +1138,60 @@ class LegacySurveyData(object):
     def sed_matched_filters(self, bands):
         from legacypipe.detection import sed_matched_filters
         return sed_matched_filters(bands)
+
+    def get_output_header(self, program_name=None, release=None, git_version=None,
+                          proctype='tile'):
+        '''
+        Creates a fitsio header describing a DECaLS data product.
+        '''
+        #import datetime
+        #import socket
+        if program_name is None:
+            import sys
+            program_name = sys.argv[0]
+        if git_version is None:
+            git_version = get_git_version()
+        hdr = fitsio.FITSHDR()
+        for s in [
+            'Data product of the DESI Imaging Legacy Surveys',
+            'Full documentation at http://legacysurvey.org',
+            ]:
+            hdr.add_record(dict(name='COMMENT', value=s, comment=s))
+        hdr.add_record(dict(name='LEGPIPEV', value=git_version,
+                            comment='legacypipe git version'))
+        hdr.add_record(dict(name='LSDIR', value=self.survey_dir,
+                            comment='$LEGACY_SURVEY_DIR directory'))
+        hdr.add_record(dict(name='LSDR', value='DR11',
+                            comment='Data release number'))
+        hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
+                            comment='The LegacySurveys'))
+        # Requested by NOIRLab
+        hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
+                            comment='Survey names'))
+        if release is None:
+            release = self.get_default_release()
+        if release is not None:
+            hdr.add_record(dict(name='DRVERSIO', value=release,
+                                comment='LegacySurveys Data Release number'))
+        hdr.add_record(dict(name='OBSTYPE', value='object',
+                            comment='Observation type'))
+        hdr.add_record(dict(name='PROCTYPE', value=proctype,
+                            comment='Processing type'))
+        # These make the output data products not bitwise reproducible...
+        # hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
+        #                     comment='%s run time' % program_name))
+        # hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
+        #                     comment='Machine where script was run'))
+        # hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
+        #                     comment='NERSC machine where script was run'))
+        # hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
+        #                     comment='SLURM job id'))
+        # hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
+        #                     comment='SLURM job array id'))
+        return hdr
+
+    def modify_tractor_catalog(self, T, columns, units, primhdr):
+        return T, columns, units, primhdr
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   camera=None, expnum=None, ccdname=None, tier=None, img=None,
@@ -1624,9 +1654,11 @@ class LegacySurveyData(object):
         '''
         Returns the directory containing SourceExtractor config files,
         used during calibration.
+
+        This is a context manager.
         '''
-        from pkg_resources import resource_filename
-        return resource_filename('legacypipe', 'config')
+        from legacypipe.utils import get_data_file
+        return get_data_file('config')
 
     def get_bricks(self):
         '''
@@ -2046,9 +2078,7 @@ class LegacySurveyData(object):
             try:
                 kd = tree_open(fn, 'expnum')
             except:
-                debug('Failed to open', fn, ':')
-                import traceback
-                traceback.print_exc()
+                error('Failed to open', fn, ':')
                 continue
             if kd is None:
                 return None
@@ -2082,10 +2112,8 @@ def run_calibs(X):
     debug('run_calibs for image', im, ':', kwargs)
     try:
         return im.run_calibs(**kwargs)
-    except:
-        print('Exception in run_calibs:', im, kwargs)
-        import traceback
-        traceback.print_exc()
+    except Exception as e:
+        error('Exception in run_calibs:', im, kwargs, e)
         if not noraise:
             raise
 
@@ -2096,45 +2124,44 @@ def read_one_tim(X):
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     if tim is not None:
         th,tw = tim.shape
-        print('Time to read %s-%s-%s: %i x %i image, hdu %i:' %
+        debug('Time to read %s-%s-%s: %i x %i image, hdu %i:' %
               (im.camera, im.expnum, im.ccdname, tw,th, im.hdu), Time()-t0)
     return tim
 
 def read_psfex_conf(camera):
     psfex_conf = {}
-    from pkg_resources import resource_filename
-    dirname = resource_filename('legacypipe', 'data')
-    fn = os.path.join(dirname, camera + '-special-psfex-conf.dat')
-    if not os.path.exists(fn):
-        debug('could not find special psfex configuration file for camera "' +
-             camera + '" - not using per-image psfex configurations.')
-        return psfex_conf
-    f = open(fn)
-    for line in f.readlines():
-        line = line.strip()
-        if len(line) == 0:
-            continue
-        if line[0] == '#':
-            continue
-        parts = line.split(None, maxsplit=1)
-        if len(parts) != 2:
-            print('Skipping line ', line)
-            continue
-        expname, flags = parts
-        if '-' in expname:
-            idparts = expname.split('-')
-            if len(idparts) != 2:
+    from legacypipe.utils import get_data_file
+    with get_data_file('data', '%s-special-psfex-conf.dat' % camera) as fn:
+        if not os.path.exists(fn):
+            debug('could not find special psfex configuration file for camera "' +
+                camera + '" - not using per-image psfex configurations.')
+            return psfex_conf
+        f = open(fn)
+        for line in f.readlines():
+            line = line.strip()
+            if len(line) == 0:
+                continue
+            if line[0] == '#':
+                continue
+            parts = line.split(None, maxsplit=1)
+            if len(parts) != 2:
                 print('Skipping line ', line)
                 continue
-            expidstr = idparts[0].strip()
-            ccd = idparts[1].strip().upper()
-        else:
-            expidstr = expname.strip()
-            ccd = None
-        try:
-            expnum = int(expidstr, 10)
-        except ValueError:
-            print('Skipping line', line)
-            continue
-        psfex_conf[(expnum, ccd)] = flags
+            expname, flags = parts
+            if '-' in expname:
+                idparts = expname.split('-')
+                if len(idparts) != 2:
+                    print('Skipping line ', line)
+                    continue
+                expidstr = idparts[0].strip()
+                ccd = idparts[1].strip().upper()
+            else:
+                expidstr = expname.strip()
+                ccd = None
+            try:
+                expnum = int(expidstr, 10)
+            except ValueError:
+                print('Skipping line', line)
+                continue
+            psfex_conf[(expnum, ccd)] = flags
     return psfex_conf

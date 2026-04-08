@@ -1,4 +1,6 @@
+import warnings
 import numpy as np
+from legacypipe.survey import tim_get_resamp
 
 import logging
 logger = logging.getLogger('legacypipe.detection')
@@ -11,7 +13,6 @@ def debug(*args):
 
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
-    from legacypipe.survey import tim_get_resamp
     (tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
@@ -35,12 +36,13 @@ def _detmap(X):
     else:
         sat = ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
         # Replace saturated pixels by the brightest (non-masked) pixel in the image
-        if np.any(sat):
-            I, = np.nonzero(sat)
-            #debug('Filling', len(I), 'saturated detmap pixels with max')
-            detim[Yi[I],Xi[I]] = np.max(detim)
-            # detection is based on S/N, so plug in values > 0 for iv
-            detiv[Yi[I],Xi[I]] = 1./detsig1**2
+        # if np.any(sat):
+        #     I, = np.nonzero(sat)
+        #     #debug('Filling', len(I), 'saturated detmap pixels with max')
+        #     detim[Yi[I],Xi[I]] = np.max(detim)
+        #     # detection is based on S/N, so plug in values > 0 for iv
+        #     detiv[Yi[I],Xi[I]] = 1./detsig1**2
+        # Replace saturated pixels by a linear interpolation from pixels on either side??
 
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
     detiv = gaussian_filter(detiv, tim.psf_sigma)
@@ -58,7 +60,8 @@ def _detmap(X):
 
     return tim.band, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
-def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
+def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None,
+                   plots=False, ps=None):
     # Render the detection maps
     H,W = targetwcs.shape
     H,W = np.int_(H), np.int_(W)
@@ -74,9 +77,11 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
             warnings.warn('Clipping nsatur to %i' % satmax)
             nsatur = satmax
         # Count how many pixels in the stack are saturated
-        satmaps = [np.zeros((H,W), np.uint8) for b in bands]
+        nsatmaps = [np.zeros((H,W), np.uint8) for b in bands]
         # Count the total number of pixels in the stack
         nmaps = [np.zeros((H,W), np.uint8) for b in bands]
+        # placeholder
+        satmaps = [None for b in bands]
 
     for band,Yo,Xo,incmap,inciv,sat in mp.imap_unordered(
             _detmap, [(tim, targetwcs, apodize) for tim in tims]):
@@ -89,20 +94,42 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
             if nsatur is None:
                 satmaps[ib][Yo,Xo] |= sat
             else:
-                satmaps[ib][Yo,Xo] = np.minimum(satmax, satmaps[ib][Yo,Xo] + (1*sat))
-                nmaps[ib][Yo,Xo] = np.minimum(satmax, nmaps[ib][Yo,Xo] + 1)
+                nsatmaps[ib][Yo,Xo] = np.minimum(satmax, nsatmaps[ib][Yo,Xo] + (1*sat))
+                nmaps   [ib][Yo,Xo] = np.minimum(satmax, nmaps   [ib][Yo,Xo] +  1)
         del Yo,Xo,incmap,inciv,sat
-    for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
+    for i,(detmap,detiv) in enumerate(zip(detmaps, detivs)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:
             nmap = nmaps[i]
-            print('Saturmap for band', bands[i], ': range', satmap.min(), satmap.max(),
-                  'mean', np.mean(satmap), 'nsatur', nsatur)
+            nsat = nsatmaps[i]
+            debug('Saturmap for band', bands[i], ': range', nsat.min(), nsat.max(),
+                  'mean', np.mean(nsat), 'nsatur', nsatur)
             # Set the SATUR bit if the number of images in the stack with SATUR set is > nsatur,
             #  OR if *every* image in the stack has SATUR set (to catch the case where the number in
             # the stack is less than nsatur such that nsatur could never be reached).
-            satmaps[i] = np.logical_or(satmap >= nsatur, satmap == nmap)
-            print('Satmap:', np.sum(satmaps[i]), 'pixels set')
+            satmaps[i] = np.logical_or(nsat >= nsatur, (nsat == nmap) * (nmap > 0))
+            info('Satmap:', np.sum(satmaps[i]), 'pixels set')
+
+            if plots:
+                import pylab as plt
+                plt.clf()
+                plt.suptitle('Saturation map: %s band' % bands[i])
+                plt.subplot(2,2,1)
+                plt.imshow(nsat, interpolation='nearest', origin='lower', vmin=0, vmax=nsatur)
+                plt.colorbar()
+                plt.title('N satur')
+                plt.subplot(2,2,2)
+                plt.imshow(nmap, interpolation='nearest', origin='lower', vmin=0)
+                plt.colorbar()
+                plt.title('N coverage')
+                plt.subplot(2,2,3)
+                plt.imshow(satmaps[i], interpolation='nearest', origin='lower', vmin=0, vmax=1)
+                plt.title('Satmap')
+                plt.subplot(2,2,4)
+                plt.imshow(detmap, interpolation='nearest', origin='lower', vmin=0)
+                plt.title('Detmap')
+                ps.savefig()
+
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):
@@ -237,6 +264,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
 
     peaksn = []
     apsn = []
+    peaksed = []
 
     for sedname,sed in SEDs:
         if plots:
@@ -258,6 +286,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         rr = np.append(rr, np.zeros_like(px) + exclusion_radius).astype(int)
         peaksn.extend(peakval)
         apsn.extend(apval)
+        peaksed.extend([sedname] * len(peakval))
 
     # New peaks:
     peakx = xx[n0:]
@@ -279,6 +308,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         assert(len(apsn) == len(Tnew))
         Tnew.peaksn = np.array(peaksn)
         Tnew.apsn = np.array(apsn)
+        Tnew.peaksed = np.array(peaksed)
         for r,d,x,y in zip(pr,pd,peakx,peaky):
             fluxes = dict([(band, detmap[y, x])
                            for band,detmap in zip(bands,detmaps)])
@@ -575,6 +605,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     nveto = 0
     nsaddle = 0
     naper = 0
+    noslc = 0
     for i,(x,y) in enumerate(zip(px, py)):
         if this_veto_map[y,x]:
             nveto += 1
@@ -610,12 +641,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         blobs,_ = label(saddlemap)
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
-        from collections import Counter
 
         # python3.11 / scipy 1.15.3 seems to require this to be an int
         oslcs = find_objects(saddlemap.astype(np.uint8))
         if len(oslcs) != 1:
-            print('oslcs:', oslcs)
             if ps is not None:
                 plt.clf()
                 plt.imshow(sedsn, interpolation='nearest', origin='lower')
@@ -648,7 +677,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                 plt.imshow(allblobs[slc] == ablob)
                 plt.title('blob matches (ablob)')
                 ps.savefig()
-                
+
+            noslc += 1
+            continue
+
         assert(len(oslcs) == 1)
         oslc = oslcs[0]
         saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])
@@ -723,7 +755,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             ps.savefig()
 
     info('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
-          naper, 'cut by aper test,', np.sum(keep), 'kept')
+          naper, 'cut by aper test,', noslc, 'with "oslc" issue;', np.sum(keep), 'kept')
 
     if ps is not None:
         pxdrop = px[np.logical_not(keep)]

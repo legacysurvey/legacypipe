@@ -92,7 +92,6 @@ class JumpSky(SplineSky):
 
     def copy(self):
         c = super().copy()
-        print('Copy:', type(c))
         c.xbreak = self.xbreak
         c.xjump = self.xjump
         return c

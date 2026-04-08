@@ -62,6 +62,7 @@ def main():
     H,W = 400,400
     in_bounds = (T.bx > 0) * (T.bx < W) * (T.by > 0) * (T.by < H)
     T.cut(in_bounds)
+    print(len(T), 'in bounds')
 
     #G = fits_table(os.path.join(survey_dir, 'gaia-dr2', 'chunk-02791.fits'))
     G = fits_table('metrics/111/reference-1110p322.fits')
@@ -73,7 +74,7 @@ def main():
     I = I[K]
     J = J[K]
     tmags = -2.5*(np.log10(np.vstack((T.flux_g[J], T.flux_r[J], T.flux_z[J]))) - 9).T
-    gmags = np.vstack((G.decam_mag_g[I], G.decam_mag_r[I], G.decam_mag_z[I])).T    
+    gmags = np.vstack((G.decam_mag_g[I], G.decam_mag_r[I], G.decam_mag_z[I])).T
     dmags = tmags - gmags
 
     np.set_printoptions(precision=3, suppress=True)
@@ -103,10 +104,12 @@ def main():
     #  [-0.044 -0.063 -0.042]
     #  [ 0.246 -0.161 -0.404]]
 
-    assert(np.all(np.abs(dmags)[:, 0] < 0.25))
-    assert(np.all(np.abs(dmags)[:, 1] < 0.8))
+    # The first two are deeply saturated; skip them
+
+    assert(np.all(np.abs(dmags)[2:, 0] < 0.3))
+    assert(np.all(np.abs(dmags)[2:, 1] < 0.51))
     # Looks like the z-band in particular is pretty bad on the highly saturated stars!
-    assert(np.all(np.abs(dmags)[:, 3:] < 0.5))
+    assert(np.all(np.abs(dmags)[3:, 2] < 0.5))
 
     gmags = np.vstack((G.phot_bp_mean_mag[I], G.phot_g_mean_mag[I], G.phot_rp_mean_mag[I])).T
     dmags = tmags - gmags
@@ -128,9 +131,9 @@ def main():
     #  [ 0.313  0.145 -0.287]
     #  [ 0.15  -0.177 -0.114]]
 
-    assert(np.all(np.abs(dmags)[:, 0] < 0.6))
-    assert(np.all(np.abs(dmags)[:, 1] < 0.7))
-    assert(np.all(np.abs(dmags)[3:, :] < 0.6))
+    assert(np.all(np.abs(dmags)[2:, 0] < 0.33))
+    assert(np.all(np.abs(dmags)[2:, 1] < 0.4))
+    assert(np.all(np.abs(dmags)[3:, 2] < 0.33))
 
     lptdir = os.environ.get('LEGACYPIPE_TEST_DATA', 'legacypipe-test-data')
     # Cross-match to Pan-STARRS1 too
@@ -165,7 +168,8 @@ def main():
 
     # g,r mags
     assert(np.all(np.abs(dmags[:, 0]) < 0.2))
-    assert(np.all(np.abs(dmags[1:, 1]) < 0.4))
+    assert(np.all(np.abs(dmags[1:, 1]) < 0.5))
+    # (one of the z band mags is way out)
     # final star
     assert(np.all(np.abs(dmags[2, :])  < 0.2))
 

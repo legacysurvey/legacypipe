@@ -88,6 +88,28 @@ class IbisData(LegacySurveyData):
         print('Maskbits:', self.get_maskbits())
         print('Maskbits descriptions:', self.get_maskbits_descriptions())
 
+    def get_output_header(self, **kwargs):
+        hdr = super().get_output_header(**kwargs)
+        hdr.delete('LSDR')
+        hdr.add_record(dict(name='MBDR', value='DR1',
+                            comment='Medium-band survey data release number'))
+        hdr.delete('SURVEY')
+        hdr.add_record(dict(name='SURVEY', value='IBIS',
+                            comment='DECam IBIS'))
+        hdr.delete('SURVEYID')
+        hdr.add_record(dict(name='SURVEYID', value='IBIS',
+                            comment='Survey names'))
+        return hdr
+
+    def get_halo_kwargs(self):
+        return dict(radius_scaling=2.)
+
+    def modify_tractor_catalog(self, T, columns, units, primhdr):
+        remap = dict(ls_id_dr11='ibis_id')
+        columns = [remap.get(c, c) for c in columns]
+        T.rename('ls_id_dr11', 'ibis_id')
+        return T, columns, units, primhdr
+
 class IbisWideData(IbisData):
     def ccds_for_fitting(self, brick, ccds):
         import numpy as np

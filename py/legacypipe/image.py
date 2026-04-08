@@ -2,6 +2,7 @@ import os
 import warnings
 import numpy as np
 import fitsio
+from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from tractor.splinesky import SplineSky
 from tractor import PixelizedPsfEx, PixelizedPSF
@@ -9,6 +10,14 @@ from legacypipe.bits import DQ_BITS
 
 import logging
 logger = logging.getLogger('legacypipe.image')
+def error(*args):
+    from legacypipe.utils import log_error
+    log_error(logger, args)
+    import traceback
+    traceback.print_exc()
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -19,7 +28,6 @@ def debug(*args):
 '''
 Base class for handling the details of images from the different cameras we process.
 '''
-
 class LegacySurveyImage(object):
     '''
     A base class containing common code for the images we handle.
@@ -99,7 +107,6 @@ class LegacySurveyImage(object):
                 hdr = self.read_image_header(ext=image_hdu)
                 # Parse ZNAXIS[12] / NAXIS[12] ?
                 info = self.read_image_fits()[image_hdu].get_info()
-                #print('Image info:', info)
                 self.height,self.width = info['dims']
                 self.hdu = info['hdunum'] - 1
                 self.ccdname = self.get_ccdname(primhdr, hdr)
@@ -165,8 +172,8 @@ class LegacySurveyImage(object):
             try:
                 self.plver = getattr(ccd, 'plver', 'xxx').strip()
             except:
-                print('Failed to read PLVER header card as a string.  This probably means your python fitsio package is too old.')
-                print('Try upgrading to version 1.0.5 or later.')
+                error('Failed to read PLVER header card as a string.  This probably means your python '
+                      'fitsio package is too old.  Try upgrading to version 1.0.5 or later.')
                 raise
             self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
             self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
@@ -404,7 +411,7 @@ class LegacySurveyImage(object):
             try:
                 ra_bore = hmsstring2ra(primhdr['RA'])
                 dec_bore = dmsstring2dec(primhdr['DEC'])
-            except:
+            except Exception:
                 pass
         if dec_bore is None and 'TELRA' in primhdr.keys():
             ra_bore = hmsstring2ra(primhdr['TELRA'])
@@ -451,7 +458,7 @@ class LegacySurveyImage(object):
     def recompute_airmass(self, primhdr, ra, dec):
         site = self.get_site()
         if site is None:
-            print('AIRMASS missing and site not defined.')
+            info('AIRMASS missing and site not defined.')
             return None
         debug('Recomputing AIRMASS')
         from astropy.time import Time as apyTime
@@ -533,7 +540,7 @@ class LegacySurveyImage(object):
         "annotated" files.  (The objects are passed as *ann* and *photom*,
         along with the annotated header *hdr*.)
         '''
-        pass
+        return
 
     def __str__(self):
         return self.name
@@ -846,12 +853,11 @@ class LegacySurveyImage(object):
                 plt.suptitle(self.name + ' expnum %i' % self.expnum)
                 ps.savefig()
 
-                from tractor.splinesky import SplineSky
                 if isinstance(sky, SplineSky):
                     grid = sky.get_grid()
-                    print('grid shape', grid.shape)
-                    print('xgrid:', sky.xgrid.shape)
-                    print('ygrid:', sky.ygrid.shape)
+                    debug('grid shape', grid.shape)
+                    debug('xgrid:', sky.xgrid.shape)
+                    debug('ygrid:', sky.ygrid.shape)
                     mid = np.median(grid.ravel())
                     scale = grid.max() - grid.min()
                     plt.clf()
@@ -859,7 +865,7 @@ class LegacySurveyImage(object):
                     plt.subplot(2,1,1)
                     xx = np.arange(sky.xgrid[0]+1, sky.xgrid[-1])
                     for i,y in enumerate(sky.ygrid):
-                        print('y grid point', y)
+                        debug('y grid point', y)
                         plt.plot(xx, i + (sky.spl(xx, y)[:,0] - mid)/scale, '-')
                         plt.plot(sky.xgrid, i + (grid[i,:] - mid)/scale, 'o')
                     plt.axvline(sky.x0, color='r', linestyle='--')
@@ -868,7 +874,7 @@ class LegacySurveyImage(object):
                     plt.subplot(2,1,2)
                     yy = np.arange(sky.ygrid[0]+1, sky.ygrid[-1])
                     for i,x in enumerate(sky.xgrid):
-                        print('x grid point', x)
+                        debug('x grid point', x)
                         plt.plot(yy, i + (sky.spl(x, yy)[0,:] - mid)/scale, '-')
                         plt.plot(sky.ygrid, i + (grid[:,i] - mid)/scale, 'o')
                     plt.axvline(sky.y0, color='r', linestyle='--')
@@ -1206,7 +1212,7 @@ class LegacySurveyImage(object):
         '''
         if self._image_header is not None:
             return self._image_header
-        print('Reading', self.imgfn, 'ext', self.hdu)
+        debug('Reading', self.imgfn, 'ext', self.hdu)
         self._image_header = self.read_image_fits()[self.hdu].read_header()
         return self._image_header
 
@@ -1240,8 +1246,8 @@ class LegacySurveyImage(object):
             try:
                 fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slc)
             except Exception as e:
-                print('Fix_weight_quantization bailed out on', self.wtfn,
-                      'hdu', self.hdu, ':', e)
+                warning('Fix_weight_quantization bailed out on', self.wtfn,
+                        'hdu', self.hdu, ':', e)
 
             if not fixed:
                 # Clamp near-zero (incl negative!) weight to zero,
@@ -1359,7 +1365,6 @@ class LegacySurveyImage(object):
 
         skyclass = Ti.skyclass.strip()
         clazz = get_class_from_name(skyclass)
-        from tractor.splinesky import SplineSky
         if issubclass(clazz, SplineSky):
             # Remove any padding
             h,w = Ti.gridh, Ti.gridw
@@ -1510,38 +1515,37 @@ class LegacySurveyImage(object):
                 cmd = 'funpack -E %i -O %s %s' % (maskhdu, tmpmaskfn, maskfn)
             debug(cmd)
             if os.system(cmd):
-                print('Command failed: ' + cmd)
+                warning('Command failed: ' + cmd)
                 M,hdr = self._read_fits(maskfn, maskhdu, header=True)
-                print('Read', M.dtype, M.shape)
+                info('Read', M.dtype, M.shape)
                 fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
-                print('Wrote', tmpmaskfn, 'with fitsio')
+                info('Wrote', tmpmaskfn, 'with fitsio')
 
         return tmpimgfn,tmpmaskfn
 
     def run_se(self, imgfn, maskfn):
-        from astrometry.util.file import trymakedirs
-        sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-        # We write the SE catalog to a temp file then rename, to avoid
-        # partially-written outputs.
-        tmpfn = os.path.join(os.path.dirname(self.sefn),
-                             'tmp-' + os.path.basename(self.sefn))
-        args = [
-            'source-extractor',
-            '-c', os.path.join(sedir, self.camera + '.se'),
-            '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
-            '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
-            '-CATALOG_NAME %s' % tmpfn,
-            '-VERBOSE_TYPE QUIET',]
-        if maskfn is not None:
-            args.append('-FLAG_IMAGE %s' % maskfn)
-        args.append(imgfn)
-        cmd = ' '.join(args)
-        print(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: ' + cmd)
-        os.rename(tmpfn, self.sefn)
+        with self.survey.get_se_dir() as sedir:
+            # We write the SE catalog to a temp file then rename, to avoid
+            # partially-written outputs.
+            tmpfn = os.path.join(os.path.dirname(self.sefn),
+                                 'tmp-' + os.path.basename(self.sefn))
+            args = [
+                'source-extractor',
+                '-c', os.path.join(sedir, self.camera + '.se'),
+                '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
+                '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
+                '-CATALOG_NAME %s' % tmpfn,
+                '-VERBOSE_TYPE QUIET',]
+            if maskfn is not None:
+                args.append('-FLAG_IMAGE %s' % maskfn)
+            args.append(imgfn)
+            cmd = ' '.join(args)
+            info('run_se:', cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: ' + cmd)
+            os.rename(tmpfn, self.sefn)
 
     def get_psfex_conf(self):
         # Return any additional PsfEx command-line flags desired.
@@ -1549,9 +1553,7 @@ class LegacySurveyImage(object):
         return psfexflags
 
     def run_psfex(self, git_version=None, ps=None):
-        from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
-        sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
@@ -1569,11 +1571,12 @@ class LegacySurveyImage(object):
         # This is the output filename that psfex will choose (since we tell it the PSF_SUFFIX)
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.get_psfex_conf()
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
-        print(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        with self.survey.get_se_dir() as sedir:
+            cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
+            info('run_psfex:', cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
 
         # Convert into a "merged psfex" format file.
         T = psfex_single_to_merged(psftmpfn, self.expnum, self.ccdname)
@@ -1622,8 +1625,6 @@ class LegacySurveyImage(object):
                 largegalaxy_frac_constsky=0.1):
         from scipy.ndimage import binary_dilation, uniform_filter
         from scipy.stats import sigmaclip
-        from astrometry.util.file import trymakedirs
-        from astrometry.util.miscutils import estimate_mode
         from legacypipe.reference import (get_reference_sources, get_galaxy_sources,
                                           get_reference_map)
         from legacypipe.bits import REF_MAP_BITS
@@ -1957,7 +1958,7 @@ class LegacySurveyImage(object):
             ps.savefig()
 
         imgname = '%s-%i-%s %s' % (self.camera, self.expnum, self.ccdname, self.band)
-                                   
+
         show_img(orig_img - initsky, title='Image %s' % imgname)
         if template is not None:
             show_img(template, title='Sky template for %s' % imgname)
@@ -2018,7 +2019,7 @@ class LegacySurveyImage(object):
             self.imshow(blobgood, **maskima)
             plt.title('Blob mask for %s' % imgname)
             ps.savefig()
-            
+
         if boxcar_mask:
             plt.clf()
             self.imshow(boxcargood, **maskima)
@@ -2088,13 +2089,13 @@ class LegacySurveyImage(object):
         # plt.title('Column-wise median')
         # plt.suptitle('masked image - sky model')
         # ps.savefig()
-        # 
+        #
         # #(wt > 0)
         # isgoodrows = np.any(wt>0, axis=1)
         # isgoodcols = np.any(wt>0, axis=0)
         # goodrows = np.flatnonzero(isgoodrows)
         # goodcols = np.flatnonzero(isgoodcols)
-        # 
+        #
         # plt.clf()
         # plt.subplot(2,1,1)
         # plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
@@ -2106,7 +2107,7 @@ class LegacySurveyImage(object):
         # plt.title('Column-wise median')
         # plt.suptitle('Unmasked image (blue) and sky (red) model')
         # ps.savefig()
-        # 
+        #
         # plt.clf()
         # plt.subplot(2,1,1)
         # plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
@@ -2116,7 +2117,7 @@ class LegacySurveyImage(object):
         # plt.title('Column-wise')
         # plt.suptitle('Fraction of masked pixels')
         # ps.savefig()
-        # 
+        #
         # plt.clf()
         # plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
         # plt.title('Unmasked pixels')
@@ -2218,12 +2219,10 @@ class LegacySurveyImage(object):
                 self.run_sky(**sky_kwargs)
             except ZeroWeightError as zwe:
                 # PsfEx isn't going to succeed either, so bail out now
-                print('ZeroWeightError running sky:', zwe)
+                warning('ZeroWeightError running sky:', zwe)
                 raise zwe
             except Exception as ex:
-                print('Exception running sky:', ex)
-                import traceback
-                traceback.print_exc()
+                error('Exception running sky:', ex)
                 skyexc = ex
 
         if se:
@@ -2232,10 +2231,9 @@ class LegacySurveyImage(object):
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
                                               self.hdu, self.dq_hdu, todelete)
             self.run_se(imgfn, maskfn)
-            #print('Not deleting temp files for SE!')
             for fn in todelete:
                 os.unlink(fn)
-        
+
         if psfex:
             try:
                 self.run_psfex(**psfex_kwargs)
@@ -2310,7 +2308,6 @@ class NormalizedPsf(object):
         return img
 
     def _sampleImage(self, img, dx, dy, **kwargs):
-        
         xl,yl,img = super()._sampleImage(img, dx, dy, **kwargs)
         n = img.sum()
         if n != 0:
@@ -2350,7 +2347,6 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     hdr = hdu.header
     table = hdu.data
     zquant = hdr.get('ZQUANTIZ','').strip()
-    #print('Fpack quantization method:', zquant)
     if len(zquant) == 0:
         # Not fpacked?
         return True

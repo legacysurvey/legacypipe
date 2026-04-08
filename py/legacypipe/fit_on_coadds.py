@@ -5,6 +5,18 @@ rather than to the individual CCDs.
 """
 import numpy as np
 
+import logging
+logger = logging.getLogger('legacypipe.fit_on_coadds')
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 class Duck(object):
     pass
 
@@ -107,17 +119,12 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     noverlap = ioverlap
     A = A[:noverlap, :]
     b = b[:noverlap]
-    #if verbose:
-    #    print('A:')
-    #    print(A)
-    #    print('b:')
-    #    print(b)
 
     R = np.linalg.lstsq(A, b, rcond=None)
 
     x = R[0]
-    print('Delta offsets to each image:')
-    print(x)
+    info('Delta offsets to each image:')
+    info(x)
 
     # Plot to assess the sign of the correction.
     if plots2:
@@ -191,7 +198,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         allbandtims = None
 
     for band in sorted(set(allbands)):
-        print('Working on band {}'.format(band))
+        info('Working on band {}'.format(band))
         I = np.where(allbands == band)[0]
 
         bandtims = [tims[ii].imobj.get_tractor_image(
@@ -209,10 +216,12 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         for jj, (correction, ii) in enumerate(zip(x, I)):
             goodpix = (tims[ii].inverr > 0)
             tims[ii].data[goodpix] += correction
+            tims[ii].setImage(tims[ii].data)
             tims[ii].sky = ConstantSky(0.0)
             # Also correct the full-field mosaics
             goodpix = (bandtims[jj].inverr > 0)
             bandtims[jj].data[goodpix] += correction
+            bandtims[jj].setImage(bandtims[jj].data)
             bandtims[jj].sky = ConstantSky(0.0)
 
         ## Check--
@@ -258,7 +267,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
             skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
             # can happen if the object is near a bright star
             if np.sum(skypix) == 0:
-                print('No pixels in sky, most likely due to bright stars!')
+                warning('No pixels in sky, most likely due to bright stars!')
                 skypix = _build_objmask(coimg, coiv, coiv > 0)
 
             for irad, (rin, rout) in enumerate(zip(allrin, allrout)):
@@ -269,12 +278,9 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                 # Find and mask objects, then get the sky.
                 skypix_annulus = np.logical_and(skypix, skymask)
                 #import matplotlib.pyplot as plt ; plt.imshow(skypix_annulus, origin='lower') ; plt.savefig('junk3.png')
-                #import pdb ; pdb.set_trace()
 
                 if np.sum(skypix_annulus) == 0:
-                    print('No pixels in sky!')
-                    #import pdb ; pdb.set_trace()
-                    #raise ValueError('No pixels in sky!')
+                    warning('No pixels in sky!')
                     _skymean, _skymedian, _skysig = 0.0, 0.0, 0.0
                 else:
                     _skymean, _skymedian, _skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_annulus), sigma=3.0)
@@ -293,6 +299,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
             for ii in I:
                 goodpix = (tims[ii].inverr > 0)
                 tims[ii].data[goodpix] -= skymedian
+                tims[ii].setImage(tims[ii].data)
                 #print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
     else:
@@ -307,7 +314,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         for coimg, coiv, band in zip(C.coimgs, C.cowimgs, bands):
            skypix = refmask * (coiv>0)
            skypix_mask = _build_objmask(coimg, coiv, skypix)
-           _, skymedian, _ = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
+           _skymean, _skymedian, _skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
 
            skydict.update({'{}SKYMN00'.format(band.upper()): (np.float32(_skymean), 'mean {} sky'.format(band))})
            skydict.update({'{}SKYMD00'.format(band.upper()): (np.float32(_skymedian), 'median {} sky'.format(band))})
@@ -317,22 +324,23 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
            I = np.where(allbands == band)[0]
            for ii in I:
                goodpix = (tims[ii].inverr > 0)
-               tims[ii].data[goodpix] -= skymedian
+               tims[ii].data[goodpix] -= _skymedian
+               tims[ii].setImage(tims[ii].data)
                # print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
            #print('Band', band, 'Coadd sky:', skymedian)
            if plots2:
                plt.clf()
                plt.hist(coimg.ravel(), bins=50, range=(-3,3), density=True)
-               plt.axvline(skymedian, color='k')
+               plt.axvline(_skymedian, color='k')
                for ii in I:
                    #print('Tim', tims[ii], 'median', np.median(tims[ii].data))
-                   plt.hist((tims[ii].data - skymedian).ravel(), bins=50, range=(-3,3), histtype='step', density=True)
+                   plt.hist((tims[ii].data - _skymedian).ravel(), bins=50, range=(-3,3), histtype='step', density=True)
                plt.title('Band %s: tim pix & skymedian' % band)
                ps.savefig()
 
                # Produce skymedian-subtracted, masked image for later RGB plot
-               coimg -= skymedian
+               coimg -= _skymedian
                coimg[~skypix_mask] = 0.
                #coimg[np.logical_not(skymask * (coiv > 0))] = 0.
 
@@ -457,6 +465,7 @@ def stage_fit_on_coadds(
     from tractor.sky import ConstantSky
     from tractor.psf import PixelizedPSF
     from tractor.tractortime import TAITime
+    from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
     import astropy.time
     import fitsio
     if plots or plots2:
@@ -473,13 +482,13 @@ def stage_fit_on_coadds(
                                            mp, subsky_radii=subsky_radii, plots=True,
                                            plots2=False, ps=ps, verbose=True)
         else:
-            print('Skipping sky-subtraction entirely.')
+            info('Skipping sky-subtraction entirely.')
 
     # Create coadds and then build custom tims from them.
     for tim in tims:
         ie = tim.inverr
         if np.any(ie < 0):
-            print('Negative inverse error in image {}'.format(tim.name))
+            warning('Negative inverse error in image {}'.format(tim.name))
 
     CC = []
     if coadd_tiers:
@@ -498,13 +507,13 @@ def stage_fit_on_coadds(
             seeing = [seeing[i] for i in I]
             N = min(coadd_tiers, len(btims))
             splits = np.round(np.arange(N+1) * float(len(btims)) / N).astype(int)
-            print('Splitting', len(btims), 'images into', N, 'tiers: splits:', splits)
-            print('Seeing limits:', [seeing[min(s,len(seeing)-1)] for s in splits])
+            info('Splitting', len(btims), 'images into', N, 'tiers: splits:', splits)
+            info('Seeing limits:', [seeing[min(s,len(seeing)-1)] for s in splits])
             for s0,s1,tt in zip(splits, splits[1:], tiers):
                 tt.extend(btims[s0:s1])
 
         for itier,tier in enumerate(tiers):
-            print('Producing coadds for tier', (itier+1))
+            info('Producing coadds for tier', (itier+1))
             C = make_coadds(tier, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, anymasks=True, psf_images=True,
@@ -590,19 +599,21 @@ def stage_fit_on_coadds(
             twcs = LegacySurveyWcs(targetwcs, tai)
             #print('PSF sigmas (in pixels) for band', band, ':',
             #      ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
-            print('PSF sigmas in coadd pixels:',
-                  ', '.join(['%.2f' % (tim.psf_sigma * tim.imobj.pixscale / pixscale)
-                             for tim in tims if tim.band == band]))
+            info('PSF sigmas in coadd pixels:',
+                 ', '.join(['%.2f' % (tim.psf_sigma * tim.imobj.pixscale / pixscale)
+                            for tim in tims if tim.band == band]))
             psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
                                  for tim in tims if tim.band == band])
-            print('Using average PSF sigma', psf_sigma)
-            print('PSF img sum', psfimg.sum())
+            info('Using average PSF sigma', psf_sigma)
+            debug('PSF img sum', psfimg.sum())
 
             psf = PixelizedPSF(psfimg)
-            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+            gaussian_psf = NCircularGaussianPSF([psf_sigma], [1.])
+            psf = HybridPixelizedPSF(psf, gauss=gaussian_psf)
 
+            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
             psfnorm = np.sqrt(np.sum(psfimg**2))
-            print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
+            debug('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
 
             # if plots:
             #     from collections import Counter
@@ -616,7 +627,7 @@ def stage_fit_on_coadds(
             tim_pixscale = np.mean([tim.imobj.pixscale for tim in tims
                                     if tim.band == band])
             cscale = tim_pixscale / pixscale
-            print('average tim pixel scale / coadd scale:', cscale)
+            debug('average tim pixel scale / coadd scale:', cscale)
             iv /= cscale**2
 
             if fitoncoadds_reweight_ivar:

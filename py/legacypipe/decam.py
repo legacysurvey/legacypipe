@@ -326,7 +326,7 @@ class DecamImage(CPImage):
                 ignore.append(5)
             dq = remap_dq_cp_codes(dq, ignore_codes=ignore)
 
-            if False:
+            if True:
                 # In some runs (not captured by plver), the DES
                 # star mask (circular mask around saturated stars) got
                 # copied into the BLEED mask.
@@ -390,7 +390,6 @@ class DecamImage(CPImage):
 
         # extra S17 masking
         if self.ccdname == 'S17':
-            from astrometry.util.miscutils import get_overlapping_region
             from legacypipe.bits import DQ_BITS
             x0, y0 = 0, 0
             H, W = dq.shape
