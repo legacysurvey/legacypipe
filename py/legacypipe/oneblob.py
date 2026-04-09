@@ -640,10 +640,10 @@ class OneBlob(object):
             else:
                 Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
                 # one singleton batch per source
-                batches = [[(i,None)] for i in Ibright]
+                batches = [[i] for i in Ibright]
 
             B = self.run_model_selection(cat, B, batches, self.segmap,
-                                         blob_mp=blob_map,
+                                         blob_mp=blob_mp,
                                          iterative_detection=iterative_detection,
                                          galaxy_masking=galaxy_masking,
                                          bright_masking=bright_masking,
@@ -651,7 +651,7 @@ class OneBlob(object):
             self.debug('Finished model selection: %s' % (Time()-tlast))
 
         if hasattr(B, 'batches'):
-            del B.batches
+            B.delete_column('batches')#del B.batches
         self.segmap = None
         tlast = Time()
 
@@ -933,87 +933,6 @@ class OneBlob(object):
             plt.title('Segments')
             self.ps.savefig()
 
-    def run_model_selection_parallel(self, cat, B, batches, segmap, mp,
-                                     iterative_detection=True,
-                                     galaxy_masking=False,
-                                     bright_masking=False,
-                                     mask_others=False):
-        # We compute & subtract initial models for the other sources while
-        # fitting each source:
-        # -Remember the original images
-        # -Compute initial models for each source (in each tim)
-        # -Subtract initial models from images
-        # -During fitting, for each source:
-        #   -add back in the source's initial model (to each tim)
-        #   -fit, with Catalog([src])
-        #   -subtract final model (from each tim)
-        # -Replace original images
-
-        models = SourceModels()
-        # Remember original tim images
-        models.save_images(self.tims)
-
-        # Create initial models for each tim x each source
-        # (model sizes are determined at this point)
-        models.create(self.tims, cat, subtract=True)
-
-        N = len(cat)
-        B.dchisq = np.zeros((N, 5), np.float32)
-        B.all_models    = np.array([{} for i in range(N)])
-        B.all_model_ivs = np.array([{} for i in range(N)])
-        B.all_model_cpu = np.array([{} for i in range(N)])
-        B.all_model_hit_limit     = np.array([{} for i in range(N)])
-        B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
-        B.all_model_opt_steps     = np.array([{} for i in range(N)])
-
-
-        # At this point, we have subtracted our best model fits for each source
-        # to be kept; the tims contain residual images.
-
-        if iterative_detection:
-
-            if self.plots and False:
-                # One plot per tim is a little much, even for me...
-                import pylab as plt
-                for tim in self.tims:
-                    plt.clf()
-                    plt.suptitle('Iterative detection: %s' % tim.name)
-                    plt.subplot(2,2,1)
-                    plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
-                               vmin=-5.*tim.sig1, vmax=10.*tim.sig1)
-                    plt.title('image')
-                    plt.subplot(2,2,2)
-                    plt.imshow(tim.getImage(), interpolation='nearest', origin='lower')
-                    plt.title('image')
-                    plt.colorbar()
-                    plt.subplot(2,2,3)
-                    plt.imshow(tim.getInvError(), interpolation='nearest', origin='lower')
-                    plt.title('inverr')
-                    plt.colorbar()
-                    plt.subplot(2,2,4)
-                    plt.imshow(tim.getImage() * (tim.getInvError() > 0), interpolation='nearest', origin='lower')
-                    plt.title('image*(inverr>0)')
-                    plt.colorbar()
-                    self.ps.savefig()
-
-            Bnew = self.iterative_detection(B, models)
-            if Bnew is not None:
-                from astrometry.util.fits import merge_tables
-                # B.sources is a list of objects... merge() with
-                # fillzero doesn't handle them well.
-                srcs = B.sources
-                newsrcs = Bnew.sources
-                B.delete_column('sources')
-                Bnew.delete_column('sources')
-                B = merge_tables([B, Bnew], columns='fillzero')
-                # columns not in Bnew:
-                # {'safe_x0', 'safe_y0', 'started_in_blob'}
-                B.sources = srcs + newsrcs
-
-        models.restore_images(self.tims)
-        del models
-        return B
-
     def run_model_selection(self, cat, B, batches, segmap,
                             blob_mp=None,
                             iterative_detection=True,
@@ -1113,7 +1032,7 @@ class OneBlob(object):
 
             self.status('Model selection for source batch %i of %i: %i source(s)' %
                         (ibatch+1, len(batches), len(batch)))
-            for j,(srci,mm) in enumerate(batch):
+            for j,srci in enumerate(batch):
 
                 if B.done_model_selection[srci]:
                     self.debug('Already done model selection for srci %i' % srci)
@@ -1125,9 +1044,6 @@ class OneBlob(object):
                     B.done_model_selection[srci] = True
                     continue
 
-                # FIXME -- if we need to re-define the model masks (based on
-                # the .create() above) then we shouldn't bother saving these
-                # from the fitting stage
                 mm = models.model_masks(srci, src)
 
                 if self.plots:
@@ -1135,20 +1051,25 @@ class OneBlob(object):
                     batch_mm.append((xb,yb))
 
                 orig_mods = [models.models[it][srci] for it in range(len(self.tims))]
-                args.append((ibatch+1, j, src, self.tims, mm, orig_mods,
+                plotfns = None
+                if self.plots:
+                    plotfns = [self.ps.getnext(), self.ps.getnext()]
+                args.append((ibatch+1, j, src, srci, self.tims, mm, orig_mods,
                              self.trargs, self.optargs,
                              self.bands, self.blobwcs, self.blobmask, self.pixscale,
                              B.forced_pointsource[srci],
                              B.fit_background[srci],
-                             segmap, gal_segmap, brightmap, self.plots_per_source, self.ps))
+                             segmap, gal_segmap, brightmap,
+                             self.plots, self.plots_per_source, plotfns))
 
             if blob_mp is not None:
-                R = blob_mp.map(model_select_one, args)
+                #R = blob_mp.map(model_select_one, args)
+                R = blob_mp.map(bounce_model_select_one, args)
             else:
                 R = map(model_select_one, args)
             self.debug('Done model selection on batch %i in parallel' % (ibatch+1))
 
-            for rtnval, (srci,_) in zip(R, batch):
+            for rtnval, srci in zip(R, batch):
                 if blob_mp is not None:
                     # Add this source's initial model back in.
                     models.add(srci, self.tims)
@@ -1156,6 +1077,8 @@ class OneBlob(object):
                 # back in in model_select_one!)
 
                 if rtnval is None:
+                    B.done_model_selection[srci] = True
+                    # ?? partial rtnval results??
                     continue
                 src = cat[srci]
                 keepsrc = rtnval.keepsrc
@@ -1197,10 +1120,6 @@ class OneBlob(object):
                 self._plot_coadd(self.tims, self.blobwcs, model=tr)
                 plt.title('Models')
                 ax = plt.axis()
-                #for (i,_),mm in zip(batch, batch_mm):
-                #for i,_ in batch:
-                #    mm = models.model_masks(i, cat[i])
-                #    xb,yb = mm_bounds_in_blob(mm, cat[i], self.tims, self.blobwcs)
                 H,W = self.blobwcs.shape
                 for xb,yb in batch_mm:
                     if xb is None:
@@ -1241,7 +1160,7 @@ class OneBlob(object):
                     self.ps.savefig()
 
             oldprefix = self.prefix
-            Bnew = self.iterative_detection(B, models)
+            Bnew = self.iterative_detection(B, models, blob_mp=blob_mp)
             self.prefix = oldprefix
 
             if Bnew is not None:
@@ -1251,6 +1170,18 @@ class OneBlob(object):
                 newsrcs = Bnew.sources
                 B.delete_column('sources')
                 Bnew.delete_column('sources')
+
+                if 'batches' in B.get_columns():
+                    batches = B.batches
+                    B.delete_column('batches')
+
+                print('Merging:')
+                B.about()
+                Bnew.about()
+
+                print('B columns:', B.columns())
+                print('Bnew columns:', Bnew.columns())
+
                 B = merge_tables([B, Bnew], columns='fillzero')
                 B.sources = srcs + newsrcs
                 del srcs, newsrcs
@@ -1259,7 +1190,7 @@ class OneBlob(object):
         del models
         return B
 
-    def iterative_detection(self, Bold, models):
+    def iterative_detection(self, Bold, models, blob_mp=None):
         from scipy.ndimage import binary_dilation
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
         from astrometry.util.multiproc import multiproc
@@ -1453,20 +1384,26 @@ class OneBlob(object):
         Bnew.x0 = Tnew.ibx.astype(np.float32)
         Bnew.y0 = Tnew.iby.astype(np.float32)
         # Be quieter during iterative detection!
-        bloblogger = logging.getLogger('legacypipe.oneblob')
-        loglvl = bloblogger.getEffectiveLevel()
-        bloblogger.setLevel(loglvl + 10)
+        old_loglevels = {}
+        for logname in ['legacypipe.oneblob', 'legacypipe.detection']:
+            thelogger = logging.getLogger(logname)
+            loglvl = thelogger.getEffectiveLevel()
+            old_loglevels[logname] = loglvl
+            thelogger.setLevel(loglvl + 10)
 
         # Run the whole oneblob pipeline on the iterative sources!
         self.saved_segmap = self.segmap
         self.segmap = None
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False,
-                        mask_others=False, is_iterative=True)
+                        mask_others=False, is_iterative=True, blob_mp=blob_mp)
         self.segmap = self.saved_segmap
         self.saved_segmap = None
 
         # revert
-        bloblogger.setLevel(loglvl)
+        for logname,loglvl in old_loglevels.items():
+            thelogger = logging.getLogger(logname)
+            thelogger.setLevel(loglvl)
+        del old_loglevels
 
         if len(Bnew) == 0:
             return None
@@ -1512,7 +1449,7 @@ class OneBlob(object):
         tr.freezeParams('images')
         return tr
 
-    def _optimize_individual_sources_parallel(self, cat, Ibright, cputime, mp):
+    def _optimize_individual_sources_parallel(self, cat, Ibright, cputime, done_fitting, mp):
         from scipy.spatial import ConvexHull
         from astrometry.util.miscutils import point_in_poly
 
@@ -1541,148 +1478,249 @@ class OneBlob(object):
             plt.axis(ax)
             self.ps.savefig()
 
-        batches = []
-
-        # Binary map of the blob-space model-masks that are in this batch.
-        blobmm = np.zeros(self.blobwcs.shape, bool)
-        # source indices in this batch
-        srcbatch = []
-        batchnum = 1
+        ##############################################################
 
         if self.plots:
-            bounds = []
+            batches,bounds = self.get_batches(Ibright, cat, models, get_bounds=True)
+        else:
+            batches = self.get_batches(Ibright, cat, models)
 
-        H,W = self.blobwcs.shape
-        for numi,srci in enumerate(Ibright):
-            src = cat[srci]
-            if src.freezeparams:
-                continue
-            # Find this source's model-mask bounds in blob space, check for intersection with
-            # current batch.
-            modelMasks = models.model_masks(srci, src)
-            hx,hy = mm_bounds_in_blob(modelMasks, src, self.tims, self.blobwcs)
-            if hx is None:
-                continue
-            xlo = min(np.clip(np.floor(hx), 0, W).astype(int))
-            ylo = min(np.clip(np.floor(hy), 0, H).astype(int))
-            xhi = max(np.clip(np.ceil (hx), 0, W).astype(int))
-            yhi = max(np.clip(np.ceil (hy), 0, H).astype(int))
-            if xlo == xhi or ylo == yhi:
-                continue
-            hslc = slice(ylo,yhi), slice(xlo,xhi)
-            sub = blobmm[hslc]
-            ## FIXME -- could do this smarter... (unique_area logic?)
-            xx,yy = np.meshgrid(np.arange(xlo, xhi), np.arange(ylo, yhi))
-            hin = point_in_poly(xx.ravel(), yy.ravel(), np.vstack((hx, hy)).T).reshape(xx.shape)
-            #print('point in hull:', Counter(hin.ravel()))
-            conflict = np.any(np.logical_and(hin, sub))
-            lastone = (numi == len(Ibright)-1)
-            if conflict or lastone:
-                #debug('%i in source batch %i' % (len(srcbatch), batchnum))
-
-                if self.plots:
-                    coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs)
-                    init_rgb = get_rgb(coimgs,self.bands)
-
-                # Process this batch...
-                args = []
-                for j,(i,mm) in enumerate(srcbatch):
-                    s = cat[i]
-                    # FIXME -- we could send sub-images (tim[mm]) to reduce the pickle volume...
-                    orig_mods = [models.models[it][i] for it in range(len(self.tims))]
-                    plotfns = []
-                    #if self.plots:
-                    #    # Create a plot for each item in the batch?
-                    #    plotfns.append(self.ps.getnext())
-                    args.append((batchnum, j, s, self.tims, mm, orig_mods, self.trargs, self.optargs,
-                                 self.bands, self.blobwcs, plotfns))
-                info('Fitting batch %i (%i sources) in parallel...' % (batchnum, len(srcbatch)))
-                R = mp.map(fit_one, args)
-                debug('Done fitting batch %i in parallel' % batchnum)
-                # Save just the source indices for the batches.
-                #batches.append([i for i,_ in srcbatch])
-                batches.append(srcbatch)
-
-                if self.plots:
-                    init_mods = []
-                    final_mods = []
-                    for it,tim in enumerate(self.tims):
-                        modimg = np.zeros_like(tim.data)
-                        init_mods.append(modimg)
-                        modimg = np.zeros_like(tim.data)
-                        final_mods.append(modimg)
-
-                #debug('Batch %i fits:' % batchnum)
-                for newsrc,(i,_) in zip(R, srcbatch):
-                    s = cat[i]
-                    # Add this source's initial model back in.
-                    models.add(i, self.tims)
-
-                    if self.plots:
-                        for it,tim in enumerate(self.tims):
-                            mod = models.models[it][i]
-                            if mod is None:
-                                continue
-                            mod.addTo(init_mods[it])
-
-                    # Copy the fit params
-                    assert(len(s.getParams()) == len(newsrc.getParams()))
-                    #debug('Old:', s)
-                    #debug('New:', newsrc)
-                    # The source type remains the same - keep the object, just copy params.
-                    s.setParams(newsrc.getParams())
-                    # Re-remove the final fit model for this source
-                    models.update_and_subtract(i, s, self.tims)
-
-                    if self.plots:
-                        for it,tim in enumerate(self.tims):
-                            mod = models.models[it][i]
-                            if mod is None:
-                                continue
-                            mod.addTo(final_mods[it])
-
-                if self.plots:
-                    plt.clf()
-                    plt.subplot(2,2,1)
-                    plt.imshow(init_rgb, interpolation='nearest', origin='lower')
-                    ax = plt.axis()
-                    for x0,x1,y0,y1 in bounds:
-                        plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
-                    plt.axis(ax)
-                    plt.title('Residuals before fitting batch')
-                    plt.subplot(2,2,2)
-                    self._plot_coadd(self.tims, self.blobwcs)
-                    plt.title('Residuals after fitting batch')
-                    ax = plt.axis()
-                    for x0,x1,y0,y1 in bounds:
-                        plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
-                    plt.axis(ax)
-                    plt.subplot(2,2,3)
-                    coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=init_mods)
-                    dimshow(get_rgb(coimgs,self.bands))
-                    plt.title('Initial models before batch')
-                    plt.subplot(2,2,4)
-                    coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=final_mods)
-                    dimshow(get_rgb(coimgs,self.bands))
-                    plt.title('Final models after batch')
-                    self.ps.savefig()
-
-                srcbatch = []
-                if lastone:
-                    break
-                if self.plots:
-                    bounds = []
-
-                batchnum += 1
-                blobmm[:,:] = False
-
-            srcbatch.append((srci, modelMasks))
+        # FIXME -- set done_fitting on all at end
+            
+        for batchnum,batch in enumerate(batches):
             if self.plots:
-                bounds.append((xlo,xhi,ylo,yhi))
-            blobmm[hslc] = hin
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs)
+                init_rgb = get_rgb(coimgs,self.bands)
 
-        debug('Exited loop; %i outstanding in source batch' % len(srcbatch))
-        assert(len(srcbatch) == 0)
+            args = []
+            for j,srci in enumerate(batch):
+                src = cat[srci]
+                mm = models.model_masks(srci, src)
+                # FIXME -- we could send sub-images (tim[mm]) to reduce the pickle volume...
+                orig_mods = [models.models[it][srci] for it in range(len(self.tims))]
+                plotfns = []
+                #if self.plots:
+                #    # Create a plot for each item in the batch?
+                #    plotfns.append(self.ps.getnext())
+                args.append((batchnum, j, src, self.tims, mm, orig_mods, self.trargs, self.optargs,
+                             self.bands, self.blobwcs, plotfns))
+            info('Fitting batch %i (%i sources) in parallel...' % (batchnum+1, len(batch)))
+            R = mp.map(fit_one, args)
+            debug('Done fitting batch %i in parallel' % (batchnum+1))
+
+            if self.plots:
+                init_mods = []
+                final_mods = []
+                for it,tim in enumerate(self.tims):
+                    modimg = np.zeros_like(tim.data)
+                    init_mods.append(modimg)
+                    modimg = np.zeros_like(tim.data)
+                    final_mods.append(modimg)
+
+            for newsrc,srci in zip(R, batch):
+                done_fitting[srci] = True
+                src = cat[srci]
+                # Add this source's initial model back in.
+                models.add(srci, self.tims)
+
+                if self.plots:
+                    for it,tim in enumerate(self.tims):
+                        mod = models.models[it][srci]
+                        if mod is None:
+                            continue
+                        mod.addTo(init_mods[it])
+                # Copy the fit params
+                assert(len(src.getParams()) == len(newsrc.getParams()))
+                # The source type remains the same - keep the object, just copy params.
+                src.setParams(newsrc.getParams())
+                # Re-remove the final fit model for this source
+                models.update_and_subtract(srci, src, self.tims)
+
+                if self.plots:
+                    for it,tim in enumerate(self.tims):
+                        mod = models.models[it][srci]
+                        if mod is None:
+                            continue
+                        mod.addTo(final_mods[it])
+
+            if self.plots:
+                plt.clf()
+                plt.subplot(2,2,1)
+                plt.imshow(init_rgb, interpolation='nearest', origin='lower')
+                ax = plt.axis()
+                for x0,x1,y0,y1 in bounds[batchnum]:
+                    plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
+                plt.axis(ax)
+                plt.title('Residuals before fitting batch')
+                plt.subplot(2,2,2)
+                self._plot_coadd(self.tims, self.blobwcs)
+                plt.title('Residuals after fitting batch')
+                ax = plt.axis()
+                for x0,x1,y0,y1 in bounds[batchnum]:
+                    plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
+                plt.axis(ax)
+                plt.subplot(2,2,3)
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=init_mods)
+                dimshow(get_rgb(coimgs,self.bands))
+                plt.title('Initial models before batch')
+                plt.subplot(2,2,4)
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=final_mods)
+                dimshow(get_rgb(coimgs,self.bands))
+                plt.title('Final models after batch')
+                self.ps.savefig()
+
+
+                    
+        ##############################################################
+        # 
+        # batches = []
+        # 
+        # # Binary map of the blob-space model-masks that are in this batch.
+        # blobmm = np.zeros(self.blobwcs.shape, bool)
+        # # source indices in this batch
+        # srcbatch = []
+        # batchnum = 1
+        # 
+        # if self.plots:
+        #     bounds = []
+        # 
+        # H,W = self.blobwcs.shape
+        # for numi,srci in enumerate(Ibright):
+        #     src = cat[srci]
+        #     if src.freezeparams:
+        #         done_fitting[srci] = True
+        #         continue
+        #     # Find this source's model-mask bounds in blob space, check for intersection with
+        #     # current batch.
+        #     modelMasks = models.model_masks(srci, src)
+        #     hx,hy = mm_bounds_in_blob(modelMasks, src, self.tims, self.blobwcs)
+        #     if hx is None:
+        #         done_fitting[srci] = True
+        #         continue
+        #     xlo = min(np.clip(np.floor(hx), 0, W).astype(int))
+        #     ylo = min(np.clip(np.floor(hy), 0, H).astype(int))
+        #     xhi = max(np.clip(np.ceil (hx), 0, W).astype(int))
+        #     yhi = max(np.clip(np.ceil (hy), 0, H).astype(int))
+        #     if xlo == xhi or ylo == yhi:
+        #         done_fitting[srci] = True
+        #         continue
+        #     hslc = slice(ylo,yhi), slice(xlo,xhi)
+        #     sub = blobmm[hslc]
+        #     ## FIXME -- could do this smarter... (unique_area logic?)
+        #     xx,yy = np.meshgrid(np.arange(xlo, xhi), np.arange(ylo, yhi))
+        #     hin = point_in_poly(xx.ravel(), yy.ravel(), np.vstack((hx, hy)).T).reshape(xx.shape)
+        #     #print('point in hull:', Counter(hin.ravel()))
+        #     conflict = np.any(np.logical_and(hin, sub))
+        #     lastone = (numi == len(Ibright)-1)
+        #     if conflict or lastone:
+        #         #debug('%i in source batch %i' % (len(srcbatch), batchnum))
+        # 
+        #         if self.plots:
+        #             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs)
+        #             init_rgb = get_rgb(coimgs,self.bands)
+        # 
+        #         # Process this batch...
+        #         args = []
+        #         for j,(i,mm) in enumerate(srcbatch):
+        #             s = cat[i]
+        #             # FIXME -- we could send sub-images (tim[mm]) to reduce the pickle volume...
+        #             orig_mods = [models.models[it][i] for it in range(len(self.tims))]
+        #             plotfns = []
+        #             #if self.plots:
+        #             #    # Create a plot for each item in the batch?
+        #             #    plotfns.append(self.ps.getnext())
+        #             args.append((batchnum, j, s, self.tims, mm, orig_mods, self.trargs, self.optargs,
+        #                          self.bands, self.blobwcs, plotfns))
+        # 
+        #         info('Fitting batch %i (%i sources) in parallel...' % (batchnum, len(srcbatch)))
+        #         R = mp.map(fit_one, args)
+        #         debug('Done fitting batch %i in parallel' % batchnum)
+        # 
+        #         # Save just the source indices for the batches.
+        #         #batches.append([i for i,_ in srcbatch])
+        #         batches.append(srcbatch)
+        # 
+        #         if self.plots:
+        #             init_mods = []
+        #             final_mods = []
+        #             for it,tim in enumerate(self.tims):
+        #                 modimg = np.zeros_like(tim.data)
+        #                 init_mods.append(modimg)
+        #                 modimg = np.zeros_like(tim.data)
+        #                 final_mods.append(modimg)
+        # 
+        #         #debug('Batch %i fits:' % batchnum)
+        #         for newsrc,(i,_) in zip(R, srcbatch):
+        #             done_fitting[i] = True
+        #             s = cat[i]
+        #             # Add this source's initial model back in.
+        #             models.add(i, self.tims)
+        # 
+        #             if self.plots:
+        #                 for it,tim in enumerate(self.tims):
+        #                     mod = models.models[it][i]
+        #                     if mod is None:
+        #                         continue
+        #                     mod.addTo(init_mods[it])
+        # 
+        #             # Copy the fit params
+        #             assert(len(s.getParams()) == len(newsrc.getParams()))
+        #             #debug('Old:', s)
+        #             #debug('New:', newsrc)
+        #             # The source type remains the same - keep the object, just copy params.
+        #             s.setParams(newsrc.getParams())
+        #             # Re-remove the final fit model for this source
+        #             models.update_and_subtract(i, s, self.tims)
+        # 
+        #             if self.plots:
+        #                 for it,tim in enumerate(self.tims):
+        #                     mod = models.models[it][i]
+        #                     if mod is None:
+        #                         continue
+        #                     mod.addTo(final_mods[it])
+        # 
+        #         if self.plots:
+        #             plt.clf()
+        #             plt.subplot(2,2,1)
+        #             plt.imshow(init_rgb, interpolation='nearest', origin='lower')
+        #             ax = plt.axis()
+        #             for x0,x1,y0,y1 in bounds:
+        #                 plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
+        #             plt.axis(ax)
+        #             plt.title('Residuals before fitting batch')
+        #             plt.subplot(2,2,2)
+        #             self._plot_coadd(self.tims, self.blobwcs)
+        #             plt.title('Residuals after fitting batch')
+        #             ax = plt.axis()
+        #             for x0,x1,y0,y1 in bounds:
+        #                 plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
+        #             plt.axis(ax)
+        #             plt.subplot(2,2,3)
+        #             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=init_mods)
+        #             dimshow(get_rgb(coimgs,self.bands))
+        #             plt.title('Initial models before batch')
+        #             plt.subplot(2,2,4)
+        #             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=final_mods)
+        #             dimshow(get_rgb(coimgs,self.bands))
+        #             plt.title('Final models after batch')
+        #             self.ps.savefig()
+        # 
+        #         srcbatch = []
+        #         if lastone:
+        #             break
+        #         if self.plots:
+        #             bounds = []
+        # 
+        #         batchnum += 1
+        #         blobmm[:,:] = False
+        # 
+        #     srcbatch.append((srci, modelMasks))
+        #     if self.plots:
+        #         bounds.append((xlo,xhi,ylo,yhi))
+        #     blobmm[hslc] = hin
+        # 
+        # debug('Exited loop; %i outstanding in source batch' % len(srcbatch))
+        # assert(len(srcbatch) == 0)
 
         models.restore_images(self.tims)
         del models
@@ -1964,6 +2002,61 @@ class OneBlob(object):
         plt.legend()
         self.ps.savefig()
 
+    def get_batches(self, Ibright, cat, models, get_bounds=False):
+        from astrometry.util.miscutils import point_in_poly
+        batches = []
+        # Binary map of the blob-space model-masks that are in this batch.
+        blobmm = np.zeros(self.blobwcs.shape, bool)
+        # source indices in this batch
+        srcbatch = []
+
+        if get_bounds:
+            allbounds = []
+            bounds = []
+        H,W = self.blobwcs.shape
+        for numi,srci in enumerate(Ibright):
+            src = cat[srci]
+            if src.freezeparams:
+                continue
+            # Find this source's model-mask bounds in blob space, check for intersection with
+            # current batch.
+            modelMasks = models.model_masks(srci, src)
+            hx,hy = mm_bounds_in_blob(modelMasks, src, self.tims, self.blobwcs)
+            if hx is None:
+                continue
+            xlo = min(np.clip(np.floor(hx), 0, W).astype(int))
+            ylo = min(np.clip(np.floor(hy), 0, H).astype(int))
+            xhi = max(np.clip(np.ceil (hx), 0, W).astype(int))
+            yhi = max(np.clip(np.ceil (hy), 0, H).astype(int))
+            if xlo == xhi or ylo == yhi:
+                continue
+            hslc = slice(ylo,yhi), slice(xlo,xhi)
+            sub = blobmm[hslc]
+            ## FIXME -- could do this smarter... (unique_area logic?)
+            xx,yy = np.meshgrid(np.arange(xlo, xhi), np.arange(ylo, yhi))
+            hin = point_in_poly(xx.ravel(), yy.ravel(), np.vstack((hx, hy)).T).reshape(xx.shape)
+            conflict = np.any(np.logical_and(hin, sub))
+            lastone = (numi == len(Ibright)-1)
+            if conflict or lastone:
+                batches.append(srcbatch)
+                if get_bounds:
+                    allbounds.append(bounds)
+                    bounds = []
+                srcbatch = []
+                if lastone:
+                    break
+                blobmm[:,:] = False
+            #srcbatch.append((srci, modelMasks))
+            srcbatch.append(srci)
+            if get_bounds:
+                bounds.append((xlo,xhi,ylo,yhi))
+            blobmm[hslc] = hin
+        debug('Exited loop; %i outstanding in source batch' % len(srcbatch))
+        assert(len(srcbatch) == 0)
+        if get_bounds:
+            return batches,allbounds
+        return batches
+
 def mm_bounds_in_blob(modelMasks, src, tims, blobwcs):
     from scipy.spatial import ConvexHull
     assert(len(modelMasks) == len(tims))
@@ -1993,10 +2086,19 @@ def mm_bounds_in_blob(modelMasks, src, tims, blobwcs):
 class Duck(object):
     pass
 
+def bounce_model_select_one(X):
+    try:
+        return model_select_one(X)
+    except Exception as e:
+        print('Error in model_select_one:')
+        import traceback
+        traceback.print_exc()
+        raise e
+
 def model_select_one(X):
-    (batchnum, batchrank, src, tims, mm, orig_mods, trargs, optargs, bands, blobwcs, blobmask,
+    (batchnum, batchrank, src, srci, tims, mm, orig_mods, trargs, optargs, bands, blobwcs, blobmask,
      pixscale, force_pointsource, fit_background,
-     segmap, gal_segmap, brightmap, plots_per_source, ps) = X
+     segmap, gal_segmap, brightmap, plots, plots_per_source, plotfns) = X
 
     rtnval = Duck()
     rtnval.all_model_ivs = {}
@@ -2024,7 +2126,7 @@ def model_select_one(X):
     srctims = []
     srcmm = []
     totalpix = 0
-    for tim_mm, tim in zip(blob_modelMasks, tims):
+    for tim_mm, tim in zip(mm, tims):
         if not src in tim_mm:
             continue
         mm = tim_mm[src]
@@ -2170,11 +2272,9 @@ def model_select_one(X):
         plt.plot([ex0,ex0,ex1,ex1,ex0], [ey0,ey1,ey1,ey0,ey0], 'r-')
         plt.axis(ax)
         plt.title('Model selection: data')
-        self.ps.savefig()
+        plt.savefig(plotfns[0])
 
     is_galaxy = isinstance(src, Galaxy)
-    force_pointsource = B.forced_pointsource[srci]
-    fit_background = B.fit_background[srci]
 
     # Use per-image sky background level
     fit_sb = False
@@ -2203,7 +2303,7 @@ def model_select_one(X):
     ix = int(ix-1)
     iy = int(iy-1)
     sh,sw = srcwcs.shape
-    optargs = self.optargs.copy()
+    optargs = optargs.copy()
     if is_galaxy:
         # allow SGA galaxy sources to start outside the blob
         optargs.update(check_step=None)
@@ -2423,7 +2523,7 @@ def model_select_one(X):
             model_mod_rgb[name] = rgb
             res = [(tim.getImage() - mod) for tim,mod in zip(srctims, modimgs)]
             co,_ = quick_coadds(srctims, bands, srcwcs, images=res)
-            rgb = get_rgb(co, self.bands)
+            rgb = get_rgb(co, bands)
             model_resid_rgb[name] = rgb
 
         # Compute inverse-variances for each source.
@@ -2443,12 +2543,12 @@ def model_select_one(X):
         _convert_ellipses(newsrc)
         assert(newsrc.numberOfParams() == nsrcparams)
 
-         # Compute a very approximate "fracin" metric (fraction of
-         # flux in masked model image versus total flux of model),
-         # to avoid wild extrapolation when nearly unconstrained.
-         fracin = dict([(b, []) for b in bands])
-         fluxes = dict([(b, newsrc.getBrightness().getFlux(b))
-                        for b in bands])
+        # Compute a very approximate "fracin" metric (fraction of
+        # flux in masked model image versus total flux of model),
+        # to avoid wild extrapolation when nearly unconstrained.
+        fracin = dict([(b, []) for b in bands])
+        fluxes = dict([(b, newsrc.getBrightness().getFlux(b))
+                       for b in bands])
 
         if fit_sb:
             # set the SB to zero before computing model metrics
@@ -2586,7 +2686,7 @@ def model_select_one(X):
         plt.suptitle('Blob %s, src %i (psf: %s, fitbg: %s): keep %s\n%s\nwas: %s' %
                      (name, srci, force_pointsource, fit_background,
                       keepmod, str(keepsrc), str(src)), fontsize=10)
-        ps.savefig()
+        plt.savefig(plotfns[1])
 
     cpu1 = time.process_time()
     rtnval.keepsrc = keepsrc

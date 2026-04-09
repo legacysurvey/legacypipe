@@ -1565,15 +1565,16 @@ def stage_fitblobs(T=None,
             for Riter in [Riter_hi, Riter_lo]:
                 if Riter is None:
                     continue
-                chks = Riter.get_and_clear_checkpoints()
-                # Keep only the last checkpoint for each blob
-                for i,up in chks.items():
-                    print('Checkpoint for', i, '=', up[-1])
-                    up = up[-1]
-                    # "up" is a OneBlob object
-                    blob_checkpoints[(brickname, up.iblob)] = up
-                    info('Recorded checkpoint for', (brickname, up.iblob))
-                    new_blob_checkpoint = True
+                if hasattr(Riter, 'get_and_clear_checkpoints'):
+                    chks = Riter.get_and_clear_checkpoints()
+                    # Keep only the last checkpoint for each blob
+                    for i,up in chks.items():
+                        print('Checkpoint for', i, '=', up[-1])
+                        up = up[-1]
+                        # "up" is a OneBlob object
+                        blob_checkpoints[(brickname, up.iblob)] = up
+                        info('Recorded checkpoint for', (brickname, up.iblob))
+                        new_blob_checkpoint = True
 
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
@@ -4731,7 +4732,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if blob_parallel:
         pool_manager = TrackingPoolManager()
         pool_manager.start()
-        blob_pool = pool_manager.TrackingPool(threads, initializer=runbrick_global_init,
+        blob_pool = pool_manager.TrackingPool(threads,
+                                              initializer=runbrick_init_cpu_worker,
                                               initargs=[])
         blob_mp = multiproc(nthreads=None, pool=blob_pool)
         kwargs.update(blob_mp=blob_mp)
