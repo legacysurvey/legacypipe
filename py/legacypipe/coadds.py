@@ -1134,7 +1134,13 @@ def _resample_one(args):
         patched = tim.getImage().copy()
         assert(np.all(np.isfinite(tim.getInvError())))
         okpix = (tim.getInvError() > 0)
-        patch_image(patched, okpix)
+
+        # lanczos: we need a margin of 3 pixels around each good pixel, no more
+        from scipy.ndimage import binary_dilation
+        required = binary_dilation(okpix, iterations=3)
+
+        patch_image(patched, okpix, required=required)
+        del required
         del okpix
         imgs = [patched]
         del patched
