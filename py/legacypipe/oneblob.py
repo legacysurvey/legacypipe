@@ -348,10 +348,9 @@ class OneBlob(object):
 
     def __getstate__(self):
         # Remove "tims" from the pickled object
-        tims = self.tims
-        self.tims = None
         R = super().__getstate__()
-        self.tims = tims
+        R = R.copy()
+        R['tims'] = None
         return R
 
     def info(self, *args):
