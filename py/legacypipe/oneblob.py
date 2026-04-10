@@ -75,7 +75,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies',
     'halfdone', 'do_segmentation', 'bright_masking', 'galaxy_masking',
-    'checkpoint_period', 'fit_on_coadds'])
+    'checkpoint_period'])
 
 def one_blob(args):
     '''
@@ -184,8 +184,6 @@ def one_blob(args):
 
         ob.checkpoint_period = args.checkpoint_period
         ob.last_checkpoint = time.monotonic()
-
-        ob.fit_on_coadds = args.fit_on_coadds
 
         # For checkpointing: we save the top-level (not iterative) B.
         ob.B = B
@@ -951,19 +949,11 @@ class OneBlob(object):
             from legacypipe.coadds import make_coadds
             from scipy.ndimage import label, binary_dilation, binary_fill_holes
             brightmap = np.zeros(self.blobwcs.shape, bool)
-
-            # shortcut for fit-on-coadds: no need to make coadds, our images are already perfect!
-            if self.fit_on_coadds:
-                self.debug('short-cutting making coadds for bright-masking')
-                for tim in self.tims:
-                    sn = tim.getImage() * tim.getInvError()
-                    brightmap |= (sn > 10.)
-            else:
-                co = make_coadds(self.tims, self.bands, self.blobwcs,
-                                 allmasks=False, mjdminmax=False)
-                for im,iv in zip(co.coimgs, co.cowimgs):
-                    sn = im * np.sqrt(iv)
-                    brightmap |= (sn > 10.)
+            co = make_coadds(self.tims, self.bands, self.blobwcs,
+                             allmasks=False, mjdminmax=False)
+            for im,iv in zip(co.coimgs, co.cowimgs):
+                sn = im * np.sqrt(iv)
+                brightmap |= (sn > 10.)
             brightmap = binary_dilation(brightmap, iterations=2)
             # fill holes for, eg, bright stars with saturated cores.
             # Should we explicitly fill SATUR?
