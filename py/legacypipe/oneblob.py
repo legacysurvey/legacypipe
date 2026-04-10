@@ -965,26 +965,59 @@ class OneBlob(object):
             if self.fit_on_coadds:
                 self.debug('short-cutting making coadds for bright-masking')
                 for tim in self.tims:
+
+                    r,d = tim.subwcs.pixelxy2radec(1., 1.)
+                    ok,x,y = self.blobwcs.radec2pixelxy(r, d)
+                    x -= 1.
+                    y -= 1.
+                    self.debug('tim bottom-left corner -> blob pixel %.3f, %.3f' % (x,y))
+                    x0 = int(np.round(x))
+                    y0 = int(np.round(y))
+                    h,w = tim.shape
+                    r,d = tim.subwcs.pixelxy2radec(w, h)
+                    ok,x,y = self.blobwcs.radec2pixelxy(r, d)
+                    x -= 1.
+                    y -= 1.
+                    self.debug('tim top-right -> blob pixel %.3f, %.3f' % (x,y))
+                    x1 = int(np.round(x))
+                    y1 = int(np.round(y))
+
+                    H,W = brightmap.shape
+                    self.debug('brightmap shape', H,W)
+                    from astrometry.util.miscutils import get_overlapping_region
+                    outx,inx = get_overlapping_region(x0, x1, 0, W-1)
+                    outy,iny = get_overlapping_region(y0, y1, 0, H-1)
+                    self.debug('inx,outx', inx,outx)
+                    self.debug('iny,outy', iny,outy)
+
                     sn = tim.getImage() * tim.getInvError()
-                    brightmap |= (sn > 10.)
+                    brightmap[outy,outx] |= (sn[iny,inx] > 10.)
                     del sn
             else:
                 self.info('calling make_coadds.  blob_mp: %s' % blob_mp)
                 if blob_mp is not None:
                     self.info('blob_mp.pool: %s %s' % (type(blob_mp.pool), blob_mp.pool))
 
+                # HACK
+                #from astrometry.util.multiproc import multiproc
+                #mp = multiproc(4)
+
                 co = make_coadds(self.tims, self.bands, self.blobwcs,
                                  allmasks=False, mjdminmax=False)
+                #mp=mp)
+                #mp=blob_mp)
                 for im,iv in zip(co.coimgs, co.cowimgs):
                     sn = im * np.sqrt(iv)
                     brightmap |= (sn > 10.)
                     del sn
                 del im,iv,co
-
+            self.debug('brightmap - binary dilation')
             brightmap = binary_dilation(brightmap, iterations=2)
             # fill holes for, eg, bright stars with saturated cores.
             # Should we explicitly fill SATUR?
+            self.debug('brightmap - binary fill holes')
             brightmap = binary_fill_holes(brightmap)
+            self.debug('brightmap - label')
             brightmap,_ = label(brightmap)
 
             if self.plots:
@@ -998,6 +1031,7 @@ class OneBlob(object):
         # SGA/large-galaxy segmentation
         gal_segmap = None
         if galaxy_masking:
+            self.debug('gal_segmap')
             # Find galaxies
             gal_inds = []
             gal_ix,gal_iy = [],[]
@@ -1005,7 +1039,8 @@ class OneBlob(object):
                 if src is None:
                     continue
                 is_galaxy = isinstance(src, Galaxy)
-                if not is_galaxy:
+                is_ref = is_reference_source(src)
+                if not (is_galaxy and is_ref):
                     continue
                 pos = src.getPosition()
                 _,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
@@ -1015,6 +1050,7 @@ class OneBlob(object):
                 gal_ix.append(ix)
                 gal_iy.append(iy)
             # Only create galaxy segmentation map if >1 galaxies
+            self.debug('gal_segmap: %i galaxies' % len(gal_inds))
             if len(gal_inds) > 1:
                 gal_segmap = np.empty((self.blobh,self.blobw), np.int32)
                 gal_segmap[:,:] = -1
@@ -1043,6 +1079,7 @@ class OneBlob(object):
         models.create(self.tims, cat, subtract=True)
 
         if batches is None:
+            self.debug('Computing the batch ordering')
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
             batches = self.get_batches(Ibright, cat, models)
 
@@ -3115,8 +3152,10 @@ class SourceModels(object):
             mods = []
             sh = tim.shape
             ie = tim.getInvError()
-            #for srci,src in enumerate(srcs):
-            for src in srcs:
+            for srci,src in enumerate(srcs):
+                if (srci+1)%1000 == 0:
+                    self.debug('creating initial models: tim %i/%i, source %i/%i' %
+                               (itim+1, len(tims), srci+1, len(srcs)))
                 if src is None:
                     continue
                 mm = None

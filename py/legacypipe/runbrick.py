@@ -2263,13 +2263,13 @@ def iter_deque(blob_meta, high_priority, job_id_map,
             try:
                 task = blob_meta.popleft()
             except IndexError:
-                info('High-priority blob iterator: ran out of elements')
+                debug('High-priority blob iterator: ran out of elements')
                 break
         else:
             try:
                 task = blob_meta.pop()
             except IndexError:
-                info('Low-priority blob iterator: ran out of elements')
+                debug('Low-priority blob iterator: ran out of elements')
                 break
 
         iblob = task['iblob']
