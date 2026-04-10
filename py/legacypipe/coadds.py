@@ -761,8 +761,21 @@ def make_coadds(tims, bands, targetwcs,
                 cb_args = mod_callback_args[itim]
             args.append((itim,tim,mo,bmo,lanczos,targetwcs,sbscale,
                          mod_callback,cb_args))
+
+            import pickle
+            S = pickle.dumps(args[-1])
+            print('make_coadds: pickle for band', band, 'tim', tim, ':', len(S), 'bytes')
+            
         if mp is not None:
-            imaps.append(mp.imap_unordered(_resample_one, args))
+
+            print('multiprocessing with', mp, 'pool', type(mp.pool), mp.pool)
+
+            import pdb
+            pdb.set_trace()
+            
+            im = mp.imap_unordered(_resample_one, args)
+            imaps.append(im)
+            #imaps.append(mp.imap_unordered(_resample_one, args))
         else:
             imaps.append(map(_resample_one, args))
 

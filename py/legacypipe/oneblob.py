@@ -954,6 +954,11 @@ class OneBlob(object):
             from legacypipe.coadds import make_coadds
             from scipy.ndimage import label, binary_dilation, binary_fill_holes
             brightmap = np.zeros(self.blobwcs.shape, bool)
+
+            self.info('calling make_coadds.  blob_mp: %s' % blob_mp)
+            if blob_mp is not None:
+                self.info('blob_mp.pool: %s %s' % (type(blob_mp.pool), blob_mp.pool))
+
             co = make_coadds(self.tims, self.bands, self.blobwcs,
                              allmasks=False, mjdminmax=False,
                              mp=blob_mp)

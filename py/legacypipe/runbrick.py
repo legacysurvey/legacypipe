@@ -4737,6 +4737,14 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                                               initargs=[])
         blob_mp = multiproc(nthreads=None, pool=blob_pool)
         kwargs.update(blob_mp=blob_mp)
+        print('Created blob_mp', blob_mp)
+        print('pool is', type(blob_pool), blob_pool)
+
+        import pickle
+        S = pickle.dumps(blob_mp)
+        blob_mp2 = pickle.loads(S)
+        print('blob_mp2:', type(blob_mp2), blob_mp2)
+        print('blob_mp2.pool:', type(blob_mp2.pool), blob_mp2.pool)
 
     # from legacypipe.prioritypool import PriorityPool
     # pool = PriorityPool(threads, gpu_threads,
