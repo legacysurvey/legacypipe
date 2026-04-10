@@ -527,7 +527,7 @@ class OneBlob(object):
             if len(cat) > 1:
 
                 if blob_mp is not None:
-                    B.batches = self._optimize_individual_sources_parallel(
+                    self._optimize_individual_sources_parallel(
                         cat, Ibright, B.cpu_source, B.done_fitting, blob_mp)
                 else:
                     self._optimize_individual_sources_subtract(
@@ -636,7 +636,7 @@ class OneBlob(object):
             self.debug('Starting model selection')
 
             if len(cat) > 1 and blob_mp is not None:
-                batches = B.batches
+                batches = None
             else:
                 Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
                 # one singleton batch per source
@@ -650,8 +650,6 @@ class OneBlob(object):
                                          mask_others=mask_others)
             self.debug('Finished model selection: %s' % (Time()-tlast))
 
-        if hasattr(B, 'batches'):
-            B.delete_column('batches')#del B.batches
         self.segmap = None
         tlast = Time()
 
@@ -1025,6 +1023,10 @@ class OneBlob(object):
         self.debug('Creating (& subtracting) initial models for model selection...')
         models.create(self.tims, cat, subtract=True)
 
+        if batches is None:
+            Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+            batches = self.get_batches(Ibright, cat, models)
+
         for ibatch,batch in enumerate(batches):
             args = []
             if self.plots:
@@ -1170,17 +1172,6 @@ class OneBlob(object):
                 newsrcs = Bnew.sources
                 B.delete_column('sources')
                 Bnew.delete_column('sources')
-
-                if 'batches' in B.get_columns():
-                    batches = B.batches
-                    B.delete_column('batches')
-
-                print('Merging:')
-                B.about()
-                Bnew.about()
-
-                print('B columns:', B.columns())
-                print('Bnew columns:', Bnew.columns())
 
                 B = merge_tables([B, Bnew], columns='fillzero')
                 B.sources = srcs + newsrcs
