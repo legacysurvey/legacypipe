@@ -2701,29 +2701,29 @@ class SourceModels(object):
         '''
         Note that this modifies the *tims* if subtract=True.
         '''
+        # self.models[itim][isrc] is a Patch (or None)
         self.models = []
         for itim,tim in enumerate(tims):
             mods = []
             sh = tim.shape
             ie = tim.getInvError()
-            #for srci,src in enumerate(srcs):
             for src in srcs:
                 if src is None:
-                    continue
-                mm = None
-                if modelmasks is not None:
-                    mm = modelmasks[itim].get(src, None)
-                mod = src.getModelPatch(tim, modelMask=mm)
-                if mod is not None and mod.patch is not None:
-                    if not np.all(np.isfinite(mod.patch)):
-                        warning('Non-finite mod patch.  Source:', src, 'tim:', tim,
-                                'PSF:', tim.getPsf())
-                    assert(np.all(np.isfinite(mod.patch)))
-
-                    mod = _clip_model_to_blob(mod, sh, ie)
-                    if subtract and mod is not None:
-                        mod.addTo(tim.getImage(), scale=-1)
-                        tim.setImage(tim.data)
+                    mod = None
+                else:
+                    mm = None
+                    if modelmasks is not None:
+                        mm = modelmasks[itim].get(src, None)
+                    mod = src.getModelPatch(tim, modelMask=mm)
+                    if mod is not None and mod.patch is not None:
+                        if not np.all(np.isfinite(mod.patch)):
+                            warning('Non-finite mod patch.  Source:', src, 'tim:', tim,
+                                    'PSF:', tim.getPsf())
+                        assert(np.all(np.isfinite(mod.patch)))
+                        mod = _clip_model_to_blob(mod, sh, ie)
+                        if subtract and mod is not None:
+                            mod.addTo(tim.getImage(), scale=-1)
+                            tim.setImage(tim.data)
                 mods.append(mod)
             self.models.append(mods)
 
