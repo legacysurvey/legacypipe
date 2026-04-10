@@ -2086,14 +2086,13 @@ class OneBlob(object):
             lastone = (numi == len(Ibright)-1)
             if conflict or lastone:
                 batches.append(srcbatch)
+                srcbatch = []
                 if get_bounds:
                     allbounds.append(bounds)
                     bounds = []
-                srcbatch = []
                 if lastone:
                     break
                 blobmm[:,:] = False
-            #srcbatch.append((srci, modelMasks))
             srcbatch.append(srci)
             if get_bounds:
                 bounds.append((xlo,xhi,ylo,yhi))
@@ -3147,6 +3146,7 @@ class SourceModels(object):
         '''
         Note that this modifies the *tims* if subtract=True.
         '''
+        # self.models[itim][isrc] is a Patch (or None)
         self.models = []
         for itim,tim in enumerate(tims):
             mods = []
@@ -3157,21 +3157,21 @@ class SourceModels(object):
                     self.debug('creating initial models: tim %i/%i, source %i/%i' %
                                (itim+1, len(tims), srci+1, len(srcs)))
                 if src is None:
-                    continue
-                mm = None
-                if modelmasks is not None:
-                    mm = modelmasks[itim].get(src, None)
-                mod = src.getModelPatch(tim, modelMask=mm)
-                if mod is not None and mod.patch is not None:
-                    if not np.all(np.isfinite(mod.patch)):
-                        warning('Non-finite mod patch.  Source:', src, 'tim:', tim,
-                                'PSF:', tim.getPsf())
-                    assert(np.all(np.isfinite(mod.patch)))
-
-                    mod = _clip_model_to_blob(mod, sh, ie)
-                    if subtract and mod is not None:
-                        mod.addTo(tim.getImage(), scale=-1)
-                        tim.setImage(tim.data)
+                    mod = None
+                else:
+                    mm = None
+                    if modelmasks is not None:
+                        mm = modelmasks[itim].get(src, None)
+                    mod = src.getModelPatch(tim, modelMask=mm)
+                    if mod is not None and mod.patch is not None:
+                        if not np.all(np.isfinite(mod.patch)):
+                            warning('Non-finite mod patch.  Source:', src, 'tim:', tim,
+                                    'PSF:', tim.getPsf())
+                        assert(np.all(np.isfinite(mod.patch)))
+                        mod = _clip_model_to_blob(mod, sh, ie)
+                        if subtract and mod is not None:
+                            mod.addTo(tim.getImage(), scale=-1)
+                            tim.setImage(tim.data)
                 mods.append(mod)
             self.models.append(mods)
 
