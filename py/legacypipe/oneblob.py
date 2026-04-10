@@ -69,19 +69,6 @@ def status_update(s, force=False):
         update_process_status(dict(type='progress', message=s))
         _last_status_update = tnow
 
-def send_checkpoint(ob):
-    from legacypipe.trackingpool import send_process_checkpoint
-    info('Sending checkpoint')
-    send_process_checkpoint(ob)
-
-def maybe_checkpoint(ob):
-    if ob.checkpoint_period is None:
-        return
-    tnow = time.monotonic()
-    if tnow - ob.last_checkpoint > ob.checkpoint_period:
-        send_checkpoint(ob)
-        ob.last_checkpoint = tnow
-
 OneBlobArgs = namedtuple('OneBlobArgs', [
     'blobname', 'nblobs', 'iblob', 'Isrcs', 'brickwcs', 'bx0', 'by0', 'blobw', 'blobh', 'blobmask',
     'timargs',
@@ -145,6 +132,10 @@ def one_blob(args):
             ob = args.halfdone
             B = ob.B
             del ob.B
+            # if checkpoint was taken during iterative fitting: revert segmap
+            if ob.saved_segmap is not None:
+                ob.segmap = ob.saved_segmap
+                ob.saved_segmap = None
             N = len(B.sources)
             info('Blob %s: resuming from checkpoint: done %i/%i fitting, %i/%i model sel' %
                  (args.blobname, np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
@@ -189,6 +180,9 @@ def one_blob(args):
         ob.checkpoint_period = args.checkpoint_period
         ob.last_checkpoint = time.monotonic()
 
+        # For checkpointing: we save the top-level (not iterative) B.
+        ob.B = B
+
         B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative,
                    galaxy_masking=args.galaxy_masking,
                    bright_masking=args.bright_masking,
@@ -202,7 +196,7 @@ def one_blob(args):
     except QuitNowException:
         if ob is not None:
             info('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
-            ob.B = B
+            #ob.B = B
         else:
             info('Caught QuitNowException; ob None for blob %s' % args.blobname)
         return ob
@@ -348,10 +342,9 @@ class OneBlob(object):
 
     def __getstate__(self):
         # Remove "tims" from the pickled object
-        tims = self.tims
-        self.tims = None
         R = super().__getstate__()
-        self.tims = tims
+        R = R.copy()
+        R['tims'] = None
         return R
 
     def info(self, *args):
@@ -359,10 +352,21 @@ class OneBlob(object):
     def debug(self, *args):
         debug(self.prefix, *args)
     def status(self, *args, force=False):
+        # print status
         self.debug(*args)
+        # send status
         status_update(self.prefix + (' ' if len(self.prefix) else '') +
                       ' '.join(str(s) for s in args), force=force)
-        maybe_checkpoint(self)
+        # maybe checkpoint
+        if self.checkpoint_period is None:
+            return
+        tnow = time.monotonic()
+        if tnow - self.last_checkpoint > self.checkpoint_period:
+            # yes, checkpoint
+            from legacypipe.trackingpool import send_process_checkpoint
+            info('Sending checkpoint')
+            send_process_checkpoint(self)
+            self.last_checkpoint = tnow
 
     def init_table(self, srcs, Isrcs):
         # Per-source measurements for this blob
