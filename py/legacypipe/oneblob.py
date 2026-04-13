@@ -1078,6 +1078,10 @@ class OneBlob(object):
         self.debug('Creating (& subtracting) initial models for model selection...')
         models.create(self.tims, cat, subtract=True)
 
+        # from astrometry.util.multiproc import multiproc
+        # mp = multiproc(4)
+        # models.create_parallel_tims(self.tims, cat, mp, subtract=True)
+
         if batches is None:
             self.debug('Computing the batch ordering')
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
@@ -3162,8 +3166,8 @@ class SourceModels(object):
             ie = tim.getInvError()
             for srci,src in enumerate(srcs):
                 if (srci+1)%1000 == 0:
-                    self.debug('creating initial models: tim %i/%i, source %i/%i' %
-                               (itim+1, len(tims), srci+1, len(srcs)))
+                    debug('creating initial models: tim %i/%i, source %i/%i' %
+                          (itim+1, len(tims), srci+1, len(srcs)))
                 if src is None:
                     mod = None
                 else:
@@ -3181,6 +3185,20 @@ class SourceModels(object):
                             mod.addTo(tim.getImage(), scale=-1)
                             tim.setImage(tim.data)
                 mods.append(mod)
+            self.models.append(mods)
+
+    def create_parallel_tims(self, tims, srcs, mp, subtract=False):
+        '''
+        Note that this modifies the *tims* if subtract=True.
+        '''
+        self.models = []
+        info('creating initial models (parallel over tims)')
+        R = mp.map(_tims_get_mod, [(itim, tim, srcs, subtract) for itim,tim in enumerate(tims)])
+        info('got results from tims_get_mod calls')
+        for tim,(mods,tim_img_sub) in zip(tims, R):
+            if subtract:
+                tim.data = tim_img_sub
+                tim.setImage(tim.data)
             self.models.append(mods)
 
     def add(self, i, tims):
@@ -3266,7 +3284,9 @@ def _clip_model_to_blob(mod, sh, ie):
     '''
     mslc,islc = mod.getSlices(sh)
     sy,sx = mslc
-    patch = mod.patch[mslc] * (ie[islc]>0)
+    patch = mod.patch[mslc]
+    if ie is not None:
+        patch *= (ie[islc]>0)
     if patch.shape == (0,0):
         return None
     mod = Patch(mod.x0 + sx.start, mod.y0 + sy.start, patch)
@@ -3432,3 +3452,48 @@ def model_masks_to_blob_extent(tims, modelMasks, src, wcs, to_int=False):
         xhi = int(np.clip(np.ceil (xhi)+1, 0, w))
 
     return xlo,xhi,ylo,yhi
+
+def _tims_get_mod(X):
+    (itim, tim, srcs, subtract) = X
+    info('tims_get_mod starting on', tim.name)
+    if subtract:
+        tim_sub_img = tim.getImage().copy()
+    ie = tim.getInvError()
+    sh = tim.shape
+    mods = []
+    for srci,src in enumerate(srcs):
+        if (srci+1)%1000 == 0:
+            debug('creating initial model %i/%i' % (srci+1, len(srcs)))
+
+            if srci == 999:
+                import pickle
+                t0 = time.time()
+                s = pickle.dumps(mods)
+                t1 = time.time()
+                s2 = pickle.dumps(tim_sub_img)
+                t2 = time.time()
+                print('pickling 1000 mods took %.3f sec and %.0f MB; image took %.3f sec and %.0f MB' %
+                      (t1-t0, len(s)/1e6, t2-t1, len(s2)/1e6))
+
+                fn = 'tim-create-%i.p' % itim
+                open(fn, 'wb').write(s)
+                print('wrote', fn)
+
+                del s,s2
+
+        if src is None:
+            mod = None
+        else:
+            mm = None
+            mod = src.getModelPatch(tim, modelMask=mm)
+            if mod is not None and mod.patch is not None:
+                if not np.all(np.isfinite(mod.patch)):
+                    warning('Non-finite mod patch.  Source:', src, 'tim:', tim,
+                            'PSF:', tim.getPsf())
+                assert(np.all(np.isfinite(mod.patch)))
+                mod = _clip_model_to_blob(mod, sh, ie)
+                if subtract and mod is not None:
+                    mod.addTo(tim_sub_img, scale=-1)
+        mods.append(mod)
+    del tim, srcs, X
+    return mods, tim_sub_img
