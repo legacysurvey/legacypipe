@@ -413,7 +413,11 @@ class TrackingPool(Pool):
                               wrap_exception,
                               worker_id))
             w.name = w.name.replace('Process', 'PoolWorker')
-            w.daemon = True
+
+            #w.daemon = True
+            # so they can fork() (start their own multiprocessing pools)
+            w.daemon = False
+
             w.worker_id = worker_id
             w.start()
             pool.append(w)

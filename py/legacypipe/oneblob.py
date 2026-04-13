@@ -23,6 +23,8 @@ from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
 
+MP_GLOBALS = {}
+
 import logging
 logger = logging.getLogger('legacypipe.oneblob')
 def error(*args):
@@ -1120,19 +1122,52 @@ class OneBlob(object):
                 plotfns = None
                 if self.plots:
                     plotfns = [self.ps.getnext(), self.ps.getnext()]
-                args.append((ibatch+1, j, src, srci, self.tims, mm, orig_mods,
-                             self.trargs, self.optargs,
-                             self.bands, self.blobwcs, self.blobmask, self.pixscale,
-                             B.forced_pointsource[srci],
-                             B.fit_background[srci],
-                             segmap, gal_segmap, brightmap,
-                             self.plots, self.plots_per_source, plotfns))
 
                 run_srci.append(srci)
+                if blob_mp is not None:
+                    args.append((ibatch+1, j, src, srci,
+                                 #self.tims,
+                                 'tims',
+                                 mm, orig_mods,
+                                 self.trargs, self.optargs,
+                                 self.bands, self.blobwcs,
+                                 #self.blobmask,
+                                 'blobmask',
+                                 self.pixscale,
+                                 B.forced_pointsource[srci],
+                                 B.fit_background[srci],
+                                 #segmap, gal_segmap, brightmap,
+                                 'segmap', 'gal_segmap', 'brightmap',
+                                 self.plots, self.plots_per_source, plotfns))
+                else:
+                    args.append((ibatch+1, j, src, srci,
+                                 self.tims,
+                                 mm, orig_mods,
+                                 self.trargs, self.optargs,
+                                 self.bands, self.blobwcs,
+                                 self.blobmask,
+                                 self.pixscale,
+                                 B.forced_pointsource[srci],
+                                 B.fit_background[srci],
+                                 segmap, gal_segmap, brightmap,
+                                 self.plots, self.plots_per_source, plotfns))
 
             if blob_mp is not None:
-                #R = blob_mp.map(model_select_one, args)
+
+                import multiprocessing
+                self.info('setting globals and restarting pool')
+                MP_GLOBALS.update(tims=self.tims,
+                                  blobmask=self.blobmask,
+                                  segmap=segmap,
+                                  gal_segmap=gal_segmap,
+                                  brightmap=brightmap)
+                blob_mp.pool = multiprocessing.Pool(64)
                 R = blob_mp.map(bounce_model_select_one, args)
+                MP_GLOBALS.clear()
+                self.info('parallel model_select finished')
+
+                #R = blob_mp.map(model_select_one, args)
+                #R = blob_mp.map(bounce_model_select_one, args)
             else:
                 R = map(model_select_one, args)
             self.debug('Done model selection on batch %i in parallel' % (ibatch+1))
@@ -2145,6 +2180,20 @@ class Duck(object):
     pass
 
 def bounce_model_select_one(X):
+
+    info('bounce_model_select_one: plugging in globals')
+
+    xnew = []
+    global_names = []
+    for x in X:
+        if type(x) is str and x in MP_GLOBALS:
+            xnew.append(MP_GLOBALS[x])
+            global_names.append(x)
+        else:
+            xnew.append(x)
+    X = xnew
+    info('plugged in globals:', global_names)
+
     try:
         return model_select_one(X)
     except Exception as e:
