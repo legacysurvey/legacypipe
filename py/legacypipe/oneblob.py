@@ -1085,17 +1085,21 @@ class OneBlob(object):
 
         for ibatch,batch in enumerate(batches):
             args = []
+            # the "srci" we're actually running
+            run_srci = []
             if self.plots:
                 batch_mm = []
 
             self.status('Model selection for source batch %i of %i: %i source(s)' %
                         (ibatch+1, len(batches), len(batch)))
             for j,srci in enumerate(batch):
-
                 if B.done_model_selection[srci]:
                     self.debug('Already done model selection for srci %i' % srci)
                     continue
                 src = cat[srci]
+                if src is None:
+                    B.done_model_selection[srci] = True
+                    continue
                 if src.freezeparams:
                     self.debug('Frozen source, keeping as-is: %s' % (str(src)))
                     B.sources[srci] = src
@@ -1120,6 +1124,8 @@ class OneBlob(object):
                              segmap, gal_segmap, brightmap,
                              self.plots, self.plots_per_source, plotfns))
 
+                run_srci.append(srci)
+
             if blob_mp is not None:
                 #R = blob_mp.map(model_select_one, args)
                 R = blob_mp.map(bounce_model_select_one, args)
@@ -1127,7 +1133,7 @@ class OneBlob(object):
                 R = map(model_select_one, args)
             self.debug('Done model selection on batch %i in parallel' % (ibatch+1))
 
-            for rtnval, srci in zip(R, batch):
+            for rtnval, srci in zip(R, run_srci):
                 if blob_mp is not None:
                     # Add this source's initial model back in.
                     models.add(srci, self.tims)
@@ -2063,6 +2069,8 @@ class OneBlob(object):
         H,W = self.blobwcs.shape
         for numi,srci in enumerate(Ibright):
             src = cat[srci]
+            if src is None:
+                continue
             if src.freezeparams:
                 continue
             # Find this source's model-mask bounds in blob space, check for intersection with
