@@ -1078,11 +1078,15 @@ class OneBlob(object):
         # Create initial models for each tim x each source
         # (model sizes are determined at this point)
         self.debug('Creating (& subtracting) initial models for model selection...')
-        models.create(self.tims, cat, subtract=True)
+        #models.create(self.tims, cat, subtract=True)
 
-        # from astrometry.util.multiproc import multiproc
-        # mp = multiproc(4)
-        # models.create_parallel_tims(self.tims, cat, mp, subtract=True)
+        MP_GLOBALS.update(tims=self.tims,
+                          srcs=cat,
+                          done_model_selection=B.done_model_selection)
+        from astrometry.util.multiproc import multiproc
+        mp = multiproc(4)
+        models.create_parallel_tims(self.tims, cat, B.done_model_selection, mp, subtract=True)
+        MP_GLOBALS.clear()
 
         if batches is None:
             self.debug('Computing the batch ordering')
@@ -3236,13 +3240,13 @@ class SourceModels(object):
                 mods.append(mod)
             self.models.append(mods)
 
-    def create_parallel_tims(self, tims, srcs, mp, subtract=False):
-        '''
-        Note that this modifies the *tims* if subtract=True.
-        '''
+    def create_parallel_tims(self, tims, srcs, done_model_selection, mp, subtract=False):
         self.models = []
         info('creating initial models (parallel over tims)')
-        R = mp.map(_tims_get_mod, [(itim, tim, srcs, subtract) for itim,tim in enumerate(tims)])
+        #R = mp.map(_tims_get_mod, [(itim, tim, srcs, done_model_selection, subtract)
+        #                           for itim,tim in enumerate(tims)])
+        R = mp.map(_tims_get_mod, [(itim, subtract)
+                                   for itim in range(len(tims))])
         info('got results from tims_get_mod calls')
         for tim,(mods,tim_img_sub) in zip(tims, R):
             if subtract:
@@ -3503,7 +3507,13 @@ def model_masks_to_blob_extent(tims, modelMasks, src, wcs, to_int=False):
     return xlo,xhi,ylo,yhi
 
 def _tims_get_mod(X):
-    (itim, tim, srcs, subtract) = X
+    #(itim, tim, srcs, done_model_selection, subtract) = X
+    (itim, subtract) = X
+    tims = MP_GLOBALS['tims']
+    tim = tims[itim]
+    srcs = MP_GLOBALS['srcs']
+    done_model_selection = MP_GLOBALS['done_model_selection']
+
     info('tims_get_mod starting on', tim.name)
     if subtract:
         tim_sub_img = tim.getImage().copy()
@@ -3543,6 +3553,9 @@ def _tims_get_mod(X):
                 mod = _clip_model_to_blob(mod, sh, ie)
                 if subtract and mod is not None:
                     mod.addTo(tim_sub_img, scale=-1)
+        if done_model_selection[srci]:
+            # we don't need the model (we do need to subtract it, we just don't need the model patch itself any more)
+            mod = None
         mods.append(mod)
-    del tim, srcs, X
+    del tim, srcs, X, done_model_selection
     return mods, tim_sub_img
