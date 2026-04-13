@@ -768,10 +768,9 @@ def make_coadds(tims, bands, targetwcs,
             
         if mp is not None:
 
-            print('multiprocessing with', mp, 'pool', type(mp.pool), mp.pool)
-
-            import pdb
-            pdb.set_trace()
+            # print('multiprocessing with', mp, 'pool', type(mp.pool), mp.pool)
+            # import pdb
+            # pdb.set_trace()
             
             im = mp.imap_unordered(_resample_one, args)
             imaps.append(im)

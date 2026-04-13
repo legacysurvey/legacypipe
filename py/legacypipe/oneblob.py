@@ -3514,21 +3514,21 @@ def _tims_get_mod(X):
         if (srci+1)%1000 == 0:
             debug('creating initial model %i/%i' % (srci+1, len(srcs)))
 
-            if srci == 999:
-                import pickle
-                t0 = time.time()
-                s = pickle.dumps(mods)
-                t1 = time.time()
-                s2 = pickle.dumps(tim_sub_img)
-                t2 = time.time()
-                print('pickling 1000 mods took %.3f sec and %.0f MB; image took %.3f sec and %.0f MB' %
-                      (t1-t0, len(s)/1e6, t2-t1, len(s2)/1e6))
-
-                fn = 'tim-create-%i.p' % itim
-                open(fn, 'wb').write(s)
-                print('wrote', fn)
-
-                del s,s2
+            # if srci == 999:
+            #     import pickle
+            #     t0 = time.time()
+            #     s = pickle.dumps(mods)
+            #     t1 = time.time()
+            #     s2 = pickle.dumps(tim_sub_img)
+            #     t2 = time.time()
+            #     print('pickling 1000 mods took %.3f sec and %.0f MB; image took %.3f sec and %.0f MB' %
+            #           (t1-t0, len(s)/1e6, t2-t1, len(s2)/1e6))
+            # 
+            #     fn = 'tim-create-%i.p' % itim
+            #     open(fn, 'wb').write(s)
+            #     print('wrote', fn)
+            # 
+            #     del s,s2
 
         if src is None:
             mod = None
