@@ -1165,7 +1165,16 @@ class OneBlob(object):
                                   segmap=segmap,
                                   gal_segmap=gal_segmap,
                                   brightmap=brightmap)
+                t0 = time.time()
                 blob_mp.pool = multiprocessing.Pool(64)
+                t1 = time.time()
+                self.info('creating pool took %.3f sec' % (t1-t0))
+
+                import pickle
+                s = pickle.dumps(args)
+                t2 = time.time()
+                self.info('pickling args took %.3f sec; %.3f MB' % (t2-t1, len(s)/1e6))
+                
                 R = blob_mp.map(bounce_model_select_one, args)
                 MP_GLOBALS.clear()
                 self.info('parallel model_select finished')
@@ -2234,39 +2243,7 @@ def model_select_one(X):
 
     # FIXME -- should we do this in the caller (so we don't need to pickle the
     # full 'tims' arrays?)
-    srctims = []
-    srcmm = []
-    totalpix = 0
-    for tim_mm, tim in zip(mm, tims):
-        if not src in tim_mm:
-            continue
-        mm = tim_mm[src]
-        x0,x1,y0,y1 = mm.extent
-        slc = slice(y0, y1), slice(x0, x1)
-        ie = tim.getInvError()[slc]
-        if np.all(ie == 0):
-            continue
-        totalpix += np.sum(ie > 0)
-        subtim = Image(data=tim.getImage()[slc],
-                       inverr=ie,
-                       wcs=tim.getWcs().shifted(x0, y0),
-                       sky=tim.getSky().shifted(x0, y0),
-                       psf=tim.getPsf().constantPsfAt((x0+x1-1)/2, (y0+y1-1)/2),
-                       photocal=tim.getPhotoCal(),
-                       name=tim.name,
-                       )
-        subtim.subwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
-        subtim.sig1 = tim.sig1
-        subtim.band = tim.band
-        subtim.meta = tim.meta
-        subtim.psf_sigma = tim.psf_sigma
-        if tim.dq is not None:
-            subtim.dq = tim.dq[slc]
-        subtim.dq_saturation_bits = tim.dq_saturation_bits
-        srctims.append(subtim)
-        srcmm.append(dict({src: ModelMask(0, 0, x1-x0, y1-y0)}))
-    modelMasks = srcmm
-    del srcmm
+    modelMasks,srctims = get_sub_tims(mm, src, tims)
     if len(srctims) == 0:
         debug('No images overlap source:', src)
         return None
@@ -2803,7 +2780,39 @@ def model_select_one(X):
     rtnval.keepsrc = keepsrc
     rtnval.cputime = cpu1-cpu0
     return rtnval
-        
+
+def get_sub_tims(modelmasks, src, tims):
+    srctims = []
+    srcmm = []
+    for tim_mm, tim in zip(mm, tims):
+        if not src in tim_mm:
+            continue
+        mm = tim_mm[src]
+        x0,x1,y0,y1 = mm.extent
+        slc = slice(y0, y1), slice(x0, x1)
+        ie = tim.getInvError()[slc]
+        if np.all(ie == 0):
+            continue
+        subtim = Image(data=tim.getImage()[slc],
+                       inverr=ie,
+                       wcs=tim.getWcs().shifted(x0, y0),
+                       sky=tim.getSky().shifted(x0, y0),
+                       psf=tim.getPsf().constantPsfAt((x0+x1-1)/2, (y0+y1-1)/2),
+                       photocal=tim.getPhotoCal(),
+                       name=tim.name,
+                       )
+        subtim.subwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
+        subtim.sig1 = tim.sig1
+        subtim.band = tim.band
+        subtim.meta = tim.meta
+        subtim.psf_sigma = tim.psf_sigma
+        if tim.dq is not None:
+            subtim.dq = tim.dq[slc]
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
+        srctims.append(subtim)
+        srcmm.append(dict({src: ModelMask(0, 0, x1-x0, y1-y0)}))
+    return srcmm, srctims
+
 def fit_one(X):
     (batchnum, batchrank, src, tims, mm, orig_mods, trargs, optargs, bands, blobwcs, plotfns) = X
 
