@@ -289,6 +289,7 @@ class OneBlob(object):
         alphas = [0.1, 0.3, 1.0]
         self.do_segmentation = do_segmentation
         self.bright_masking = bright_masking
+        self.checkpoint_period = None
 
         self.segmap = None
         # When we do iterative detection, the original segmentation map gets saved here.
