@@ -959,6 +959,7 @@ class OneBlob(object):
 
         # HACK
         if blob_mp is not None:
+            import multiprocessing
             blob_mp.pool = multiprocessing.Pool(64)
 
         
@@ -1134,17 +1135,17 @@ class OneBlob(object):
                     plotfns = [self.ps.getnext(), self.ps.getnext()]
 
                 # Pull out subimages
-                srcmm,srctims = get_sub_tims(mm, src, tims)
+                srcmm,srctims,srcx0y0 = get_sub_tims(mm, src, self.tims)
                 if len(srctims) == 0:
                     debug('No images overlap source:', src)
                     # do we... do anything to the src?
                     B.done_model_selection[srci] = True
                     continue
                 # Coordinates within the blob of the source mask
-                sx0,sx1,sy0,sy1 = model_masks_to_blob_extent(srctims, srcmm, src, blobwcs,
+                sx0,sx1,sy0,sy1 = model_masks_to_blob_extent(srctims, srcmm, src, self.blobwcs,
                                                              to_int=True)
-                srcwcs = blobwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
-                srcblobmask = blobmask[sy0:sy1, sx0:sx1]
+                srcwcs = self.blobwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
+                srcblobmask = self.blobmask[sy0:sy1, sx0:sx1]
                 src_segmap = None
                 src_galsegmap = None
                 src_brightmap = None
@@ -1152,12 +1153,12 @@ class OneBlob(object):
                     src_segmap = segmap[sy0:sy1, sx0:sx1]
                 if gal_segmap is not None:
                     src_galsegmap = gal_segmap[sy0:sy1, sx0:sx1]
-                if brightmap is nto None:
+                if brightmap is not None:
                     src_brightmap = brightmap[sy0:sy1, sx0:sx1]
                 run_srci.append(srci)
                 args.append((ibatch+1, j, src, srci,
                              srctims, srcmm,
-                             orig_mods,
+                             orig_mods, srcx0y0,
                              self.trargs, self.optargs,
                              self.bands,
                              srcwcs, srcblobmask,
@@ -1197,11 +1198,11 @@ class OneBlob(object):
             self.debug('Done model selection on batch %i in parallel' % (ibatch+1))
 
             for rtnval, srci in zip(R, run_srci):
-                if blob_mp is not None:
-                    # Add this source's initial model back in.
-                    models.add(srci, self.tims)
+                #if blob_mp is not None:
+                # Add this source's initial model back in.
+                models.add(srci, self.tims)
                 # (if we're not multi-processing, the initial model already got added
-                # back in in model_select_one!)
+                # back in in model_select_one!) ((not any more))
 
                 if rtnval is None:
                     B.done_model_selection[srci] = True
@@ -2228,7 +2229,7 @@ class Duck(object):
 
 def model_select_one(X):
     (batchnum, batchrank, src, srci,
-     srctims, modelMasks, orig_mods, trargs, optargs, bands,
+     srctims, modelMasks, orig_mods, srcx0y0, trargs, optargs, bands,
      srcwcs, srcblobmask,
      pixscale, force_pointsource, fit_background,
      segmap, gal_segmap, brightmap, plots, plots_per_source, plotfns) = X
@@ -2247,10 +2248,15 @@ def model_select_one(X):
      
     cpu0 = time.process_time()
     # Add this source's initial model back in.
-    for mod,tim in zip(orig_mods, tims):
+    for mod,tim,(x0,y0) in zip(orig_mods, srctims, srcx0y0):
         if mod is None:
             continue
+        mod.x0 += x0
+        mod.y0 += y0
         mod.addTo(tim.getImage())
+        # revert in case we're not multiprocessing
+        mod.x0 -= x0
+        mod.y0 -= y0
 
     sh,sw = srcblobmask.shape
 
@@ -2784,6 +2790,7 @@ def model_select_one(X):
 def get_sub_tims(modelmasks, src, tims):
     srctims = []
     srcmm = []
+    srcx0y0 = []
     for tim_mm, tim in zip(modelmasks, tims):
         if not src in tim_mm:
             continue
@@ -2793,8 +2800,8 @@ def get_sub_tims(modelmasks, src, tims):
         ie = tim.getInvError()[slc]
         if np.all(ie == 0):
             continue
-        subtim = Image(data=tim.getImage()[slc],
-                       inverr=ie,
+        subtim = Image(data=tim.getImage()[slc].copy(),
+                       inverr=ie.copy(),
                        wcs=tim.getWcs().shifted(x0, y0),
                        sky=tim.getSky().shifted(x0, y0),
                        psf=tim.getPsf().constantPsfAt((x0+x1-1)/2, (y0+y1-1)/2),
@@ -2811,7 +2818,8 @@ def get_sub_tims(modelmasks, src, tims):
         subtim.dq_saturation_bits = tim.dq_saturation_bits
         srctims.append(subtim)
         srcmm.append(dict({src: ModelMask(0, 0, x1-x0, y1-y0)}))
-    return srcmm, srctims
+        srcx0y0.append((x0,y0))
+    return srcmm, srctims, srcx0y0
 
 def fit_one(X):
     (batchnum, batchrank, src, tims, mm, orig_mods, trargs, optargs, bands, blobwcs, plotfns) = X
