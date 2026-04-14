@@ -956,6 +956,12 @@ class OneBlob(object):
         #   -subtract final model (from each tim)
         # -Replace original images
 
+
+        # HACK
+        if blob_mp is not None:
+            blob_mp.pool = multiprocessing.Pool(64)
+
+        
         brightmap = None
         # Mask other blobs of bright pixels while fitting a source in a bright blob.
         if bright_masking and len(cat) > 1:
@@ -1127,59 +1133,64 @@ class OneBlob(object):
                 if self.plots:
                     plotfns = [self.ps.getnext(), self.ps.getnext()]
 
+                # Pull out subimages
+                srcmm,srctims = get_sub_tims(mm, src, tims)
+                if len(srctims) == 0:
+                    debug('No images overlap source:', src)
+                    # do we... do anything to the src?
+                    B.done_model_selection[srci] = True
+                    continue
+                # Coordinates within the blob of the source mask
+                sx0,sx1,sy0,sy1 = model_masks_to_blob_extent(srctims, srcmm, src, blobwcs,
+                                                             to_int=True)
+                srcwcs = blobwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
+                srcblobmask = blobmask[sy0:sy1, sx0:sx1]
+                src_segmap = None
+                src_galsegmap = None
+                src_brightmap = None
+                if segmap is not None:
+                    src_segmap = segmap[sy0:sy1, sx0:sx1]
+                if gal_segmap is not None:
+                    src_galsegmap = gal_segmap[sy0:sy1, sx0:sx1]
+                if brightmap is nto None:
+                    src_brightmap = brightmap[sy0:sy1, sx0:sx1]
                 run_srci.append(srci)
-                if blob_mp is not None:
-                    args.append((ibatch+1, j, src, srci,
-                                 #self.tims,
-                                 'tims',
-                                 mm, orig_mods,
-                                 self.trargs, self.optargs,
-                                 self.bands, self.blobwcs,
-                                 #self.blobmask,
-                                 'blobmask',
-                                 self.pixscale,
-                                 B.forced_pointsource[srci],
-                                 B.fit_background[srci],
-                                 #segmap, gal_segmap, brightmap,
-                                 'segmap', 'gal_segmap', 'brightmap',
-                                 self.plots, self.plots_per_source, plotfns))
-                else:
-                    args.append((ibatch+1, j, src, srci,
-                                 self.tims,
-                                 mm, orig_mods,
-                                 self.trargs, self.optargs,
-                                 self.bands, self.blobwcs,
-                                 self.blobmask,
-                                 self.pixscale,
-                                 B.forced_pointsource[srci],
-                                 B.fit_background[srci],
-                                 segmap, gal_segmap, brightmap,
-                                 self.plots, self.plots_per_source, plotfns))
+                args.append((ibatch+1, j, src, srci,
+                             srctims, srcmm,
+                             orig_mods,
+                             self.trargs, self.optargs,
+                             self.bands,
+                             srcwcs, srcblobmask,
+                             self.pixscale,
+                             B.forced_pointsource[srci],
+                             B.fit_background[srci],
+                             src_segmap, src_galsegmap, src_brightmap,
+                             self.plots, self.plots_per_source, plotfns))
 
             if blob_mp is not None:
 
                 import multiprocessing
-                self.info('setting globals and restarting pool')
-                MP_GLOBALS.update(tims=self.tims,
-                                  blobmask=self.blobmask,
-                                  segmap=segmap,
-                                  gal_segmap=gal_segmap,
-                                  brightmap=brightmap)
-                t0 = time.time()
-                blob_mp.pool = multiprocessing.Pool(64)
-                t1 = time.time()
-                self.info('creating pool took %.3f sec' % (t1-t0))
+                #self.info('setting globals and restarting pool')
+                #MP_GLOBALS.update(tims=self.tims,
+                #                  blobmask=self.blobmask,
+                #                  segmap=segmap,
+                #                  gal_segmap=gal_segmap,
+                #                  brightmap=brightmap)
+                #t0 = time.time()
+                #blob_mp.pool = multiprocessing.Pool(64)
+                #t1 = time.time()
+                #self.info('creating pool took %.3f sec' % (t1-t0))
+                #
+                #import pickle
+                #s = pickle.dumps(args)
+                #t2 = time.time()
+                #self.info('pickling args took %.3f sec; %.3f MB' % (t2-t1, len(s)/1e6))
 
-                import pickle
-                s = pickle.dumps(args)
-                t2 = time.time()
-                self.info('pickling args took %.3f sec; %.3f MB' % (t2-t1, len(s)/1e6))
-                
-                R = blob_mp.map(bounce_model_select_one, args)
-                MP_GLOBALS.clear()
+                #R = blob_mp.map(bounce_model_select_one, args)
+                #MP_GLOBALS.clear()
                 self.info('parallel model_select finished')
 
-                #R = blob_mp.map(model_select_one, args)
+                R = blob_mp.map(model_select_one, args)
                 #R = blob_mp.map(bounce_model_select_one, args)
             else:
                 R = map(model_select_one, args)
@@ -2192,31 +2203,33 @@ def mm_bounds_in_blob(modelMasks, src, tims, blobwcs):
 class Duck(object):
     pass
 
-def bounce_model_select_one(X):
-
-    info('bounce_model_select_one: plugging in globals')
-
-    xnew = []
-    global_names = []
-    for x in X:
-        if type(x) is str and x in MP_GLOBALS:
-            xnew.append(MP_GLOBALS[x])
-            global_names.append(x)
-        else:
-            xnew.append(x)
-    X = xnew
-    info('plugged in globals:', global_names)
-
-    try:
-        return model_select_one(X)
-    except Exception as e:
-        print('Error in model_select_one:')
-        import traceback
-        traceback.print_exc()
-        raise e
+# def bounce_model_select_one(X):
+# 
+#     info('bounce_model_select_one: plugging in globals')
+# 
+#     xnew = []
+#     global_names = []
+#     for x in X:
+#         if type(x) is str and x in MP_GLOBALS:
+#             xnew.append(MP_GLOBALS[x])
+#             global_names.append(x)
+#         else:
+#             xnew.append(x)
+#     X = xnew
+#     info('plugged in globals:', global_names)
+# 
+#     try:
+#         return model_select_one(X)
+#     except Exception as e:
+#         print('Error in model_select_one:')
+#         import traceback
+#         traceback.print_exc()
+#         raise e
 
 def model_select_one(X):
-    (batchnum, batchrank, src, srci, tims, mm, orig_mods, trargs, optargs, bands, blobwcs, blobmask,
+    (batchnum, batchrank, src, srci,
+     srctims, modelMasks, orig_mods, trargs, optargs, bands,
+     srcwcs, srcblobmask,
      pixscale, force_pointsource, fit_background,
      segmap, gal_segmap, brightmap, plots, plots_per_source, plotfns) = X
 
@@ -2239,20 +2252,6 @@ def model_select_one(X):
             continue
         mod.addTo(tim.getImage())
 
-    # Create tiny local tims corresponding to the modelMasks.
-
-    # FIXME -- should we do this in the caller (so we don't need to pickle the
-    # full 'tims' arrays?)
-    modelMasks,srctims = get_sub_tims(mm, src, tims)
-    if len(srctims) == 0:
-        debug('No images overlap source:', src)
-        return None
-
-    # Coordinates within the blob of the source mask
-    sx0,sx1,sy0,sy1 = model_masks_to_blob_extent(srctims, modelMasks, src, blobwcs,
-                                                 to_int=True)
-    srcwcs = blobwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
-    srcblobmask = blobmask[sy0:sy1, sx0:sx1]
     sh,sw = srcblobmask.shape
 
     pos = src.getPosition()
@@ -2267,34 +2266,36 @@ def model_select_one(X):
     # omitting mask_others entirely
 
     if segmap is not None:
-        # Segmap is the size of the full blob, so apply a pixel offset
-        s = segmap[iy + sy0, ix + sx0]
+        assert(segmap.shape == sh,sw)
+        s = segmap[iy, ix]
         if s != -1:
             if source_mask is None:
-                source_mask = srcblobmask & (segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
+                source_mask = srcblobmask & (segmap == s)
             else:
-                source_mask &= (segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
+                source_mask &= (segmap == s)
 
     is_galaxy = isinstance(src, Galaxy)
     if is_galaxy and (gal_segmap is not None):
-        s = gal_segmap[iy + sy0, ix + sx0]
+        assert(gal_segmap.shape == sh,sw)
+        s = gal_segmap[iy, ix]
         if s != -1:
             if source_mask is None:
-                source_mask = srcblobmask & (gal_segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
+                source_mask = srcblobmask & (gal_segmap == s)
             else:
-                source_mask &= (gal_segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
+                source_mask &= (gal_segmap == s)
 
     if (brightmap is not None) and in_bounds:
-        s = brightmap[iy + sy0, ix + sx0]
+        assert(brightmap.shape == sh,sw)
+        s = brightmap[iy, ix]
         if s == 0:
             # The current source is not in a bright blob.
             # Mask out all pixels in bright blobs
-            brmask = (brightmap[sy0:sy0+sh, sx0:sx0+sw] == 0)
+            brmask = (brightmap == 0)
         else:
             # The current source is in a bright blob.
             # Mask out all pixels in *other* bright blobs
-            brmask = ((brightmap[sy0:sy0+sh, sx0:sx0+sw] == 0) |
-                      (brightmap[sy0:sy0+sh, sx0:sx0+sw] == s))
+            brmask = ((brightmap == 0) |
+                      (brightmap == s))
         if source_mask is None:
             source_mask = srcblobmask & brmask
         else:
@@ -2336,7 +2337,6 @@ def model_select_one(X):
         srctims = keep_srctims
         modelMasks = keep_mm
         del keep_srctims, keep_mm
-
 
     # B.blob_symm_nimages[srci] = len(srctims)
     # B.blob_symm_npix   [srci] = totalpix
@@ -2412,9 +2412,9 @@ def model_select_one(X):
         else:
             warning('WARNING: unknown galaxy type:', src)
 
-    debug(('Source at blob coordinates %i,%i, local source coords %i,%i of %ix%i; ' +
-           'forcing pointsource? %s, is large galaxy? %s, fitting sky background: %s') %
-          (sx0+ix, sy0+iy, ix, iy, sw, sh, force_pointsource, is_galaxy, fit_background))
+    #debug(('Source at blob coordinates %i,%i, local source coords %i,%i of %ix%i; ' +
+    #       'forcing pointsource? %s, is large galaxy? %s, fitting sky background: %s') %
+    #      (sx0+ix, sy0+iy, ix, iy, sw, sh, force_pointsource, is_galaxy, fit_background))
 
     opt = srctractor.optimizer
     opt.cache_image_params(srctractor)
@@ -2784,7 +2784,7 @@ def model_select_one(X):
 def get_sub_tims(modelmasks, src, tims):
     srctims = []
     srcmm = []
-    for tim_mm, tim in zip(mm, tims):
+    for tim_mm, tim in zip(modelmasks, tims):
         if not src in tim_mm:
             continue
         mm = tim_mm[src]
