@@ -56,6 +56,7 @@ def stage_galex_forced(
     galex_dir=None,
     brick=None,
     galex_ceres=True,
+    galex_gaia_only=False,
     save_galex_psf=False,
     version_header=None,
     maskbits=None,
@@ -75,6 +76,10 @@ def stage_galex_forced(
 
     record_event and record_event('stage_galex_forced: starting')
     _add_stage_version(version_header, 'GALEX', 'galex_forced')
+    version_header.add_record(dict(name='G_CERES', value=galex_ceres,
+                                   comment='GALEX forced phot: use Ceres optimizer?'))
+    version_header.add_record(dict(name='GALEX_GAIA_ONLY', value=galex_gaia_only,
+                                   comment='GALEX forced phot: only Gaia + SGA sources?'))
 
     galex_apertures_arcsec = wise_apertures_arcsec
 
@@ -115,6 +120,13 @@ def stage_galex_forced(
                 Icluster = Igood[incluster[yy, xx]]
                 info('Found', len(Icluster), 'of', len(Igood), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
+
+    if galex_gaia_only:
+        # Only photometer reference sources: Gaia and SGA.
+        info('Only photometering reference sources:', Counter(T.ref_cat))
+        do_phot[np.array([len(r.strip()) == 0 for r in T.ref_cat])] = False
+        info('do_phot: now', Counter(do_phot))
+
     Nskipped = len(do_phot) - np.sum(do_phot)
 
     gcat = []
@@ -213,7 +225,8 @@ def stage_galex_forced(
 
     return dict(GALEX=GALEX,
                 version_header=version_header,
-                galex_apertures_arcsec=galex_apertures_arcsec)
+                galex_apertures_arcsec=galex_apertures_arcsec,
+                galex_gaia_only=galex_gaia_only)
 
 def galex_phot(X):
     '''
