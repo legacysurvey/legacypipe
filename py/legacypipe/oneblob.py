@@ -959,9 +959,11 @@ class OneBlob(object):
 
         # HACK
         if blob_mp is not None:
-            import multiprocessing
-            blob_mp.pool = multiprocessing.Pool(64)
-
+            #import multiprocessing
+            #blob_mp.pool = multiprocessing.Pool(16)
+            from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+            blob_mp.pool = TimingPool(64)
+            Time.add_measurement(TimingPoolMeas(blob_mp.pool))
         
         brightmap = None
         # Mask other blobs of bright pixels while fitting a source in a bright blob.
@@ -1109,6 +1111,8 @@ class OneBlob(object):
 
             self.status('Model selection for source batch %i of %i: %i source(s)' %
                         (ibatch+1, len(batches), len(batch)))
+            t0 = time.time()
+            T0 = Time()
             for j,srci in enumerate(batch):
                 if B.done_model_selection[srci]:
                     self.debug('Already done model selection for srci %i' % srci)
@@ -1156,10 +1160,15 @@ class OneBlob(object):
                 if brightmap is not None:
                     src_brightmap = brightmap[sy0:sy1, sx0:sx1]
                 run_srci.append(srci)
+
+                # ugh!!
+                optargs = self.optargs.copy()
+                optargs.update(check_step=CheckStep(srcwcs, srcblobmask))
+
                 args.append((ibatch+1, j, src, srci,
                              srctims, srcmm,
                              orig_mods, srcx0y0,
-                             self.trargs, self.optargs,
+                             self.trargs, optargs,
                              self.bands,
                              srcwcs, srcblobmask,
                              self.pixscale,
@@ -1170,7 +1179,7 @@ class OneBlob(object):
 
             if blob_mp is not None:
 
-                import multiprocessing
+                #import multiprocessing
                 #self.info('setting globals and restarting pool')
                 #MP_GLOBALS.update(tims=self.tims,
                 #                  blobmask=self.blobmask,
@@ -1187,16 +1196,60 @@ class OneBlob(object):
                 #t2 = time.time()
                 #self.info('pickling args took %.3f sec; %.3f MB' % (t2-t1, len(s)/1e6))
 
+                if False:
+                    import pickle
+                    sizes = []
+                    for a in args:
+                        tims = a[4]
+                        blobmask = a[12]
+                        if len(tims) == 0:
+                            continue
+                        tim_total_pix = 0
+                        for tim in tims:
+                            th,tw = tim.shape
+                            tim_total_pix += th*tw
+                        s = pickle.dumps(a)
+                        ss = [len(pickle.dumps(aa)) for aa in a]
+                        self.info('tim[0] size %s, total tim pix %i, blob size %s, pickle length %i.  args element lengths: %s' %
+                                  (tims[0].shape, tim_total_pix, blobmask.shape, len(s), ss))
+                        for tim in tims:
+                            s = pickle.dumps(tim)
+                            S = tim.__getstate__()
+                            self.info('tim size %s: pickle size %s.' % (tim.shape, len(s)))
+                            xx = ''
+                            for k,v in S.items():
+                                xx = xx + k + ': %i' % len(pickle.dumps(v)) + ', '
+                            self.info('tim item sizes:', xx)
+                        del s
+                        for isub,sub in enumerate(tim.subs):
+                            self.info('tim sub:', sub, 'dir', dir(sub), 'pickle size %s' % len(pickle.dumps(sub)))
+                            S = sub.__getstate__()
+                            s = pickle.dumps(sub)
+                            self.info('tim sub %i: pickle size %s.' % (isub, len(s)))
+                            try:
+                                xx = ''
+                                for k,v in S.items():
+                                    xx = xx + k + ': %i' % len(pickle.dumps(v)) + ', '
+                                self.info('tim sub item sizes:', xx)
+                            except:
+                                self.info('tim sub: state', S)
+
                 #R = blob_mp.map(bounce_model_select_one, args)
                 #MP_GLOBALS.clear()
-                self.info('parallel model_select finished')
-
+                t1 = time.time()
+                T1 = Time()
                 R = blob_mp.map(model_select_one, args)
-                #R = blob_mp.map(bounce_model_select_one, args)
+                t2 = time.time()
+                T2 = Time()
+                self.info('parallel model_select batch %i/%i finished: %.3f sec setup, %.3f sec running' %
+                          (ibatch+1, len(batches), t1-t0, t2-t1))
+                self.info('model_select batch %i/%i: setup: %s, run: %s' % (ibatch+1, len(batches), T1-T0, T2-T1))
+
             else:
                 R = map(model_select_one, args)
-            self.debug('Done model selection on batch %i in parallel' % (ibatch+1))
+            self.debug('Done model selection on batch %i/%i in parallel' % (ibatch+1,len(batches)))
 
+            t0 = time.time()
             for rtnval, srci in zip(R, run_srci):
                 #if blob_mp is not None:
                 # Add this source's initial model back in.
@@ -1236,6 +1289,8 @@ class OneBlob(object):
                 B.hit_r_limit[srci] = rtnval.hit_r_limit
                 B.dchisq[srci,:] = rtnval.dchisq
                 B.done_model_selection[srci] = True
+            t1 = time.time()
+            self.info('post-processing took %.3f sec' % (t1-t0))
 
             if self.plots:
                 import pylab as plt
@@ -2272,7 +2327,7 @@ def model_select_one(X):
     # omitting mask_others entirely
 
     if segmap is not None:
-        assert(segmap.shape == sh,sw)
+        assert(segmap.shape == (sh,sw))
         s = segmap[iy, ix]
         if s != -1:
             if source_mask is None:
@@ -2282,7 +2337,7 @@ def model_select_one(X):
 
     is_galaxy = isinstance(src, Galaxy)
     if is_galaxy and (gal_segmap is not None):
-        assert(gal_segmap.shape == sh,sw)
+        assert(gal_segmap.shape == (sh,sw))
         s = gal_segmap[iy, ix]
         if s != -1:
             if source_mask is None:
@@ -2291,7 +2346,7 @@ def model_select_one(X):
                 source_mask &= (gal_segmap == s)
 
     if (brightmap is not None) and in_bounds:
-        assert(brightmap.shape == sh,sw)
+        assert(brightmap.shape == (sh,sw))
         s = brightmap[iy, ix]
         if s == 0:
             # The current source is not in a bright blob.

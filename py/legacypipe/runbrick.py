@@ -2540,6 +2540,7 @@ def _get_both_mods(*X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
     (tim, targetwcs, srcs, srcblobs, blobmap, frozen_galaxies, ps, plots) = X
+    debug('resampling blob map...')
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -2556,6 +2557,7 @@ def _get_both_mods(*X):
     srcs_blobs = list(zip(srcs, srcblobs))
 
     fro_rd = set()
+    debug('frozen galaxies...')
     if frozen_galaxies is not None:
         from tractor.patch import ModelMask
         timblobs = set(timblobmap.ravel())
@@ -2597,7 +2599,9 @@ def _get_both_mods(*X):
     NEA = []
     no_nea = [0.,0.,0.]
     pcal = tim.getPhotoCal()
-    for src,srcblob in srcs_blobs:
+    for srci,(src,srcblob) in enumerate(srcs_blobs):
+        if (srci+1)%1000 == 0:
+            debug('source %i/%i' % (srci+1, len(src_blobs)))
         if src is None:
             NEA.append(no_nea)
             continue
