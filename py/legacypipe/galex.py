@@ -122,6 +122,7 @@ def stage_galex_forced(
                 do_phot[Icluster] = False
 
     if galex_gaia_only:
+        from collections import Counter
         # Only photometer reference sources: Gaia and SGA.
         info('Only photometering reference sources:', Counter(T.ref_cat))
         do_phot[np.array([len(r.strip()) == 0 for r in T.ref_cat])] = False
