@@ -1557,6 +1557,8 @@ def stage_fitblobs(T=None,
             for Riter in [Riter_hi, Riter_lo]:
                 if Riter is None:
                     continue
+                if not hasattr(Riter, 'get_and_clear_checkpoints'):
+                    continue
                 chks = Riter.get_and_clear_checkpoints()
                 # Keep only the last checkpoint for each blob
                 for i,up in chks.items():
