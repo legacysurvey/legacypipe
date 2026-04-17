@@ -507,7 +507,7 @@ def stage_refs(survey=None,
         from legacypipe.units import get_units_for_columns
         assert(len(refobjs) == len(refcat))
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
-                'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
+                'istycho', 'isgaia', 'islargegalaxy', 'issgafit', 'iscluster',
                 'isbright', 'ismedium', 'freezeparams', 'pointsource', 'ignore_source', 'in_bounds',
                 'fitmode', 'isresolved', 'ismcloud',
                 'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_i', 'decam_mag_z',
@@ -1424,6 +1424,10 @@ def stage_fitblobs(T=None,
         iterative_nsigma = nsigma
 
     job_id_map = {}
+
+    # Tag along some booleans from the reference table T to the src objects
+    for i,src in enumerate(cat):
+        src.issgafit = T.issgafit[i]
 
     # Create the list of blobs to process
     blob_meta = get_blob_metadata(
