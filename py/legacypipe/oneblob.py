@@ -2082,9 +2082,16 @@ class OneBlob(object):
             cat.freezeAllBut(i)
             src = cat[i]
             if src.freezeparams:
-                debug('Frozen source', src, '-- keeping as-is!')
-                done_fitting[i] = True
-                continue
+                info('Frozen source', src, ': is-sga-fit?', src.issgafit)
+                if src.issgafit:
+                    # We'll re-fit its flux.
+                    src.freezeAllBut('brightness')
+                    initial_flux = flux_string(src)
+                else:
+                    # Keep source as-is
+                    done_fitting[i] = True
+                    continue
+
             modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
 
@@ -2094,6 +2101,9 @@ class OneBlob(object):
             tr.optimize_loop(**self.optargs)
 
             opt.clear_cached_image_params()
+
+            if src.freezeparams and src.issgafit:
+                self.debug('Re-fit SGA flux:', initial_flux, 'to', flux_string(src))
 
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
@@ -2133,9 +2143,15 @@ class OneBlob(object):
             cpu0 = time.process_time()
             src = cat[srci]
             if src.freezeparams:
-                debug('Frozen source', src, '-- keeping as-is!')
-                done_fitting[srci] = True
-                continue
+                self.debug('Frozen source', src, ': is-sga-fit?', src.issgafit)
+                if src.issgafit:
+                    # We'll re-fit its flux.
+                    src.freezeAllBut('brightness')
+                    initial_flux = flux_string(src)
+                else:
+                    # Keep source as-is
+                    done_fitting[srci] = True
+                    continue
             self.status('Fitting source %i of %i' % (numi+1, len(Ibright)))
 
             modelMasks = models.model_masks(srci, src)
@@ -2164,12 +2180,13 @@ class OneBlob(object):
                 # other parameters), to avoid problems like NGC0943,
                 # where one galaxy in a pair moves a large distance to
                 # fit the overall light profile.
-                ra,dec = src.pos.getParams()
+                pos = src.pos
+                ra,dec = pos.ra, pos.dec
                 cosdec = np.cos(np.deg2rad(dec))
                 # max allowed motion in deg
                 maxmove = 5. / 3600.
-                src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
-                src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
+                pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
+                pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
             #debug('%i images overlap this source' % len(srctims))
             optargs = self.optargs.copy()
@@ -2223,6 +2240,9 @@ class OneBlob(object):
             models.update_and_subtract(srci, src, self.tims)
 
             srctractor.setModelMasks(None)
+
+            if src.freezeparams and src.issgafit:
+                self.debug('Re-fit SGA flux:', initial_flux, 'to', flux_string(src))
 
             self.debug('Finished fitting source %i of %i (source id %i): %s' %
                        (numi+1, len(Ibright), srci, str(src)))
@@ -2380,6 +2400,15 @@ class OneBlob(object):
         plt.title('initial sources')
         plt.legend()
         self.ps.savefig()
+
+def flux_string(src):
+    bright = src.brightness
+    s = ''
+    for i,band in enumerate(bright.order):
+        if i:
+            s += ', '
+        s += '%s=%.3f' % (band, getattr(bright, band))
+    return s
 
 def create_tims(blobwcs, blobmask, timargs):
     from legacypipe.bits import DQ_BITS
