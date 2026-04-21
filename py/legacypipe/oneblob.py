@@ -2125,14 +2125,14 @@ class OneBlob(object):
             src = cat[i]
             if src.freezeparams:
                 info('Frozen source', src, ': is-sga-fit?', src.issgafit)
-                if src.issgafit:
-                    # We'll re-fit its flux.
-                    src.freezeAllBut('brightness')
-                    initial_flux = flux_string(src)
-                else:
-                    # Keep source as-is
-                    done_fitting[i] = True
-                    continue
+                # if src.issgafit:
+                #     # We'll re-fit its flux.
+                #     src.freezeAllBut('brightness')
+                #     initial_flux = flux_string(src)
+                # else:
+                # Keep source as-is
+                done_fitting[i] = True
+                continue
 
             modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
@@ -2144,8 +2144,8 @@ class OneBlob(object):
 
             opt.clear_cached_image_params()
 
-            if src.freezeparams and src.issgafit:
-                self.debug('Re-fit SGA flux:', initial_flux, 'to', flux_string(src))
+            #if src.freezeparams and src.issgafit:
+            #    self.debug('Re-fit SGA flux:', initial_flux, 'to', flux_string(src))
 
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
@@ -2186,14 +2186,14 @@ class OneBlob(object):
             src = cat[srci]
             if src.freezeparams:
                 self.debug('Frozen source', src, ': is-sga-fit?', src.issgafit)
-                if src.issgafit:
-                    # We'll re-fit its flux.
-                    src.freezeAllBut('brightness')
-                    initial_flux = flux_string(src)
-                else:
-                    # Keep source as-is
-                    done_fitting[srci] = True
-                    continue
+                #if src.issgafit:
+                #    # We'll re-fit its flux.
+                #    src.freezeAllBut('brightness')
+                #    initial_flux = flux_string(src)
+                #else:
+                # Keep source as-is
+                done_fitting[srci] = True
+                continue
             self.status('Fitting source %i of %i' % (numi+1, len(Ibright)))
 
             modelMasks = models.model_masks(srci, src)
@@ -2355,8 +2355,8 @@ class OneBlob(object):
 
             srctractor.setModelMasks(None)
 
-            if src.freezeparams and src.issgafit:
-                self.debug('Re-fit SGA flux:', initial_flux, 'to', flux_string(src))
+            #if src.freezeparams and src.issgafit:
+            #    self.debug('Re-fit SGA flux:', initial_flux, 'to', flux_string(src))
 
             self.debug('Finished fitting source %i of %i (source id %i): %s' %
                        (numi+1, len(Ibright), srci, str(src)))
@@ -2513,7 +2513,7 @@ class OneBlob(object):
         # sga-fit
         Is = np.flatnonzero([src.freezeparams and src.issgafit for src in goodcat])
         if len(Is):
-            plt.plot(x0[Is]-1, y0[Is]-1, 'o', mec='c', mfc='none', ms=10, mew=2,
+            plt.plot(x0[Is]-1, y0[Is]-1, 'o', mec='c', mfc='none', ms=11, mew=2,
                          label='SGA-fit')
         plt.axis(ax)
         plt.title('initial sources')
