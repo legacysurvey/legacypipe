@@ -1796,6 +1796,13 @@ class OneBlob(object):
                 trymodels = [(oldmodel, newsrc)]
                 if oldmodel == 'ser':
                     ser = newsrc
+                elif oldmodel == 'rex':
+                    rex = newsrc
+                elif oldmodel == 'dev':
+                    dev = newsrc
+                elif oldmodel == 'exp':
+                    exp = newsrc
+
             else:
                 # If the source was initialized as a galaxy, try all models
                 trymodels.extend([('rex', rex), ('dev', dev), ('exp', exp),
