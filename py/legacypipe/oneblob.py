@@ -1030,11 +1030,11 @@ class OneBlob(object):
 
             sga_fit = False
             if src.freezeparams:
-                if src.issgafit:
+                if src.issgafit and isinstance(src, PointSource):
                     # We'll re-fit its flux.
                     src.freezeAllBut('brightness')
                     initial_flux = flux_string(src)
-                    self.debug('SGA-fit - re-fitting flux.  has_fixed_position:', has_fixed_position(src))
+                    self.debug('SGA-fit point source- re-fitting flux.')
                     sga_fit = True
                 else:
                     self.debug('Frozen source, keeping as-is: %s' % (str(src)))
