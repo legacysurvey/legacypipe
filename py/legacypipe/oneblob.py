@@ -622,7 +622,6 @@ class OneBlob(object):
 
             # SGA sources that come in should never get forced to point-source via masks.
             if is_galaxy:
-                fit_background = False
                 force_pointsource = False
             B.forced_pointsource[srci] = force_pointsource
             B.fit_background[srci] = fit_background
@@ -1028,11 +1027,18 @@ class OneBlob(object):
 
             cpu0 = time.process_time()
 
+            sga_fit = False
             if src.freezeparams:
-                self.debug('Frozen source, keeping as-is: %s' % (str(src)))
-                B.sources[srci] = src
-                B.done_model_selection[srci] = True
-                continue
+                if src.issgafit and isinstance(src, PointSource):
+                    # We'll re-fit its flux.
+                    initial_flux = flux_string(src)
+                    self.debug('SGA-fit point source- re-fitting flux.')
+                    sga_fit = True
+                else:
+                    self.debug('Frozen source, keeping as-is: %s' % (str(src)))
+                    B.sources[srci] = src
+                    B.done_model_selection[srci] = True
+                    continue
 
             # Add this source's initial model back in.
             models.add(srci, self.tims)
@@ -1055,6 +1061,7 @@ class OneBlob(object):
                                                       mask_others=mask_others,
                                                       brightmap=brightmap,
                                                       gal_segmap=gal_segmap,
+                                                      sga_fit=sga_fit,
                                                       plots=plots)
             self.prefix = pre
 
@@ -1067,6 +1074,9 @@ class OneBlob(object):
                 src.brightness = src.initial_brightness
                 src.force_keep_source = True
                 keepsrc = src
+
+            if sga_fit:
+                self.debug('SGA-fit - flux fit from', initial_flux, 'to', flux_string(keepsrc))
 
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
@@ -1359,6 +1369,7 @@ class OneBlob(object):
                                    mask_others=False,
                                    brightmap=None,
                                    gal_segmap=None,
+                                   sga_fit=False,
                                    plots=False):
         blob_modelMasks = models.model_masks(srci, src)
 
@@ -1683,7 +1694,7 @@ class OneBlob(object):
         if is_galaxy:
             # allow SGA galaxy sources to start outside the blob
             optargs.update(check_step=None)
-        elif has_fixed_position(src):
+        elif has_fixed_position(src) or sga_fit:
             # eg, Gaia sources - positions fixed, so no need to check
             optargs.update(check_step=None)
         elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
@@ -1701,8 +1712,8 @@ class OneBlob(object):
                 warning('WARNING: unknown galaxy type:', src)
 
         debug(('Source at blob coordinates %i,%i, local source coords %i,%i of %ix%i; ' +
-               'forcing pointsource? %s, is large galaxy? %s, fitting sky background: %s') %
-              (sx0+ix, sy0+iy, ix, iy, sw, sh, force_pointsource, is_galaxy, fit_background))
+               'forcing pointsource? %s, is large galaxy? %s, fitting sky background: %s, sga_fit %s') %
+              (sx0+ix, sy0+iy, ix, iy, sw, sh, force_pointsource, is_galaxy, fit_background, sga_fit))
 
         opt = srctractor.optimizer
         opt.cache_image_params(srctractor)
@@ -1767,12 +1778,30 @@ class OneBlob(object):
             elif force_pointsource:
                 # Geometric mask
                 debug('Not computing galaxy models due to being in a mask')
+            elif sga_fit:
+                debug('sga-fit PSF; not fitting any other models')
+                psf.freezeAllBut('brightness')
             else:
                 trymodels.append(('rex', rex))
                 # Try galaxy models if rex > psf, or if bright.
                 # The 'gals' model is just a marker
                 trymodels.append(('gals', None))
         else:
+            # We decided to only re-fit SGA-fit point source fluxes; keeping this in case we reconsider!
+            # if sga_fit:
+            #     debug('sga-fit galaxy model "%s"; not fitting any other models' % oldmodel)
+            #     newsrc = src.copy()
+            #     newsrc.freezeAllBut('brightness')
+            #     trymodels = [(oldmodel, newsrc)]
+            #     if oldmodel == 'ser':
+            #         ser = newsrc
+            #     elif oldmodel == 'rex':
+            #         rex = newsrc
+            #     elif oldmodel == 'dev':
+            #         dev = newsrc
+            #     elif oldmodel == 'exp':
+            #         exp = newsrc
+
             # If the source was initialized as a galaxy, try all models
             trymodels.extend([('rex', rex), ('dev', dev), ('exp', exp),
                               ('ser', None)])
@@ -1844,36 +1873,39 @@ class OneBlob(object):
             self.debug('After model selection (just fluxes): %s' % (str(newsrc)))
             newsrc.thawAllParams()
 
-            try:
-                R = srctractor.optimize_loop(**optargs)
-            except Exception as e:
-                error('Exception fitting source in model selection.  src:', newsrc)
-                raise(e)
-            self.debug('After  model selection: %s' % (str(newsrc)))
-            hit_limit = R.get('hit_limit', False)
-            opt_steps = R.get('steps', -1)
+            hit_limit = False
             hit_ser_limit = False
             hit_r_limit = False
-            if hit_limit:
-                debug('Source', newsrc, 'hit limit:')
-                if is_debug():
-                    for nm,p,low,upp in zip(newsrc.getParamNames(), newsrc.getParams(),
-                                            newsrc.getLowerBounds(), newsrc.getUpperBounds()):
-                        debug('  ', nm, '=', p, 'bounds', low, upp)
-                if name == 'ser':
-                    si = newsrc.sersicindex
-                    sival = si.getValue()
-                    # Can end up close, but not exactly at a limit...
-                    if min(sival - si.lower, si.upper - sival) < 1e-3:
-                        hit_ser_limit = True
-                        debug('Hit sersic limit')
-                if name in ['rex', 'exp', 'dev', 'ser']:
-                    shape = newsrc.shape
-                    logr = shape.logre
-                    if min(logr - shape.getLowerBounds()[0],
-                           shape.getUpperBounds()[0] - logr) < 0.01:
-                        hit_r_limit = True
-                        debug('Hit radius limit')
+            opt_steps = 0
+            if not sga_fit:
+                try:
+                    R = srctractor.optimize_loop(**optargs)
+                except Exception as e:
+                    error('Exception fitting source in model selection.  src:', newsrc)
+                    raise(e)
+                self.debug('After  model selection: %s' % (str(newsrc)))
+                hit_limit = R.get('hit_limit', False)
+                opt_steps = R.get('steps', -1)
+                if hit_limit:
+                    debug('Source', newsrc, 'hit limit:')
+                    if is_debug():
+                        for nm,p,low,upp in zip(newsrc.getParamNames(), newsrc.getParams(),
+                                                newsrc.getLowerBounds(), newsrc.getUpperBounds()):
+                            debug('  ', nm, '=', p, 'bounds', low, upp)
+                    if name == 'ser':
+                        si = newsrc.sersicindex
+                        sival = si.getValue()
+                        # Can end up close, but not exactly at a limit...
+                        if min(sival - si.lower, si.upper - sival) < 1e-3:
+                            hit_ser_limit = True
+                            debug('Hit sersic limit')
+                    if name in ['rex', 'exp', 'dev', 'ser']:
+                        shape = newsrc.shape
+                        logr = shape.logre
+                        if min(logr - shape.getLowerBounds()[0],
+                               shape.getUpperBounds()[0] - logr) < 0.01:
+                            hit_r_limit = True
+                            debug('Hit radius limit')
 
             _,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
                                            newsrc.getPosition().dec)
@@ -2059,9 +2091,17 @@ class OneBlob(object):
                         for spine in ax.spines.values():
                             spine.set_edgecolor('red')
                             spine.set_linewidth(2)
-            plt.suptitle('Blob %s, src %i (psf: %s, fitbg: %s): keep %s\n%s\nwas: %s' %
-                         (self.name, srci, force_pointsource, fit_background,
-                          keepmod, str(keepsrc), str(src)), fontsize=10)
+            keepstr = str(keepsrc)
+            oldstr = str(src)
+            keepstr = keepstr.replace('RaDecPos:', '')
+            keepstr = keepstr.replace('EllipseWithPriors(0.25):', '')
+            keepstr = keepstr.replace('NanoMaggies:', 'mags:')
+            oldstr = oldstr.replace('RaDecPos:', '')
+            oldstr = oldstr.replace('EllipseWithPriors(0.25):', '')
+            oldstr = oldstr.replace('NanoMaggies:', 'mags:')
+            plt.suptitle('Blob %s, src %i (psf: %s, fitbg: %s, sga-fit %s): keep %s\n%s\nwas: %s' %
+                         (self.name, srci, force_pointsource, fit_background, sga_fit,
+                          keepmod, keepstr, oldstr), fontsize=10)
             self.ps.savefig()
 
         return keepsrc
@@ -2133,7 +2173,7 @@ class OneBlob(object):
             cpu0 = time.process_time()
             src = cat[srci]
             if src.freezeparams:
-                debug('Frozen source', src, '-- keeping as-is!')
+                self.debug('Frozen source', src, '-- keeping as-is!')
                 done_fitting[srci] = True
                 continue
             self.status('Fitting source %i of %i' % (numi+1, len(Ibright)))
@@ -2164,12 +2204,13 @@ class OneBlob(object):
                 # other parameters), to avoid problems like NGC0943,
                 # where one galaxy in a pair moves a large distance to
                 # fit the overall light profile.
-                ra,dec = src.pos.getParams()
+                pos = src.pos
+                ra,dec = pos.ra, pos.dec
                 cosdec = np.cos(np.deg2rad(dec))
                 # max allowed motion in deg
                 maxmove = 5. / 3600.
-                src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
-                src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
+                pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
+                pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
             #debug('%i images overlap this source' % len(srctims))
             optargs = self.optargs.copy()
@@ -2179,11 +2220,14 @@ class OneBlob(object):
             opt = srctractor.optimizer
             opt.cache_image_params(srctractor)
 
-            if self.plots:
-                mods = list(srctractor.getModelImages())
-                mod0,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
-                                      fill_holes=False)
-                rgb,_ = quick_coadds(srctims, self.bands, self.blobwcs,
+            #do_plot = self.plots and (numi<20 or numi%20 == 0)
+            do_plot = False
+
+            if do_plot:
+                mods0 = list(srctractor.getModelImages())
+                comods0,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods0,
+                                         fill_holes=False)
+                coimgs,_ = quick_coadds(srctims, self.bands, self.blobwcs,
                                       fill_holes=False)
 
             # First-round optimization
@@ -2191,26 +2235,35 @@ class OneBlob(object):
 
             opt.clear_cached_image_params()
 
-            if self.plots and (numi<20 or numi%20 == 0):
-                mods = list(srctractor.getModelImages())
-                mod1,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
-                                      fill_holes=False)
+            if do_plot:
+                mods1 = list(srctractor.getModelImages())
+                comods1,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods1,
+                                        fill_holes=False)
                 import pylab as plt
                 plt.clf()
-                plt.subplot(1,3,1)
-                dimshow(get_rgb(rgb, self.bands))
+                R,C = 1,3
+                plt.subplot(R,C,1)
+                dimshow(get_rgb(coimgs, self.bands))
                 plt.title('Data')
                 ax = plt.axis()
                 ex0,ex1,ey0,ey1 = model_masks_to_blob_extent(srctims, srcmm, src, self.blobwcs,
                                                              to_int=True)
                 plt.plot([ex0,ex0,ex1,ex1,ex0], [ey0,ey1,ey1,ey0,ey0], 'r-')
                 plt.axis(ax)
-                plt.subplot(1,3,2)
-                dimshow(get_rgb(mod0, self.bands))
+                plt.subplot(R,C,2)
+                dimshow(get_rgb(comods0, self.bands))
                 plt.title('Initial model')
-                plt.subplot(1,3,3)
-                dimshow(get_rgb(mod1, self.bands))
+                plt.subplot(R,C,3)
+                dimshow(get_rgb(comods1, self.bands))
                 plt.title('Fit model')
+                for i in range(len(self.bands)):
+                    plt.subplot(R,C, C+i+1)
+                    d = coimgs[i] - comods1[i]
+                    mn,mx = np.percentile(d.ravel(), [1,99])
+                    mx = max(np.abs(mn), np.abs(mx))
+                    plt.imshow(d, interpolation='nearest', origin='lower',
+                               vmin=-mx, vmax=mx, cmap='RdBu')
+                    plt.title('%s band resid' % self.bands[i])
                 plt.suptitle('Source fitting: %i of %i' % (numi+1, len(Ibright)))
                 self.ps.savefig()
 
@@ -2376,10 +2429,26 @@ class OneBlob(object):
         if len(Ir):
             plt.plot(x0[Ir]-1, y0[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
                          label='Ref source')
+        # sga-fit
+        Is = np.flatnonzero([src.freezeparams and src.issgafit for src in goodcat])
+        if len(Is):
+            plt.plot(x0[Is]-1, y0[Is]-1, 'o', mec='c', mfc='none', ms=11, mew=2,
+                         label='SGA-fit')
         plt.axis(ax)
         plt.title('initial sources')
         plt.legend()
         self.ps.savefig()
+
+def flux_string(src):
+    if src is None:
+        return '(src is none)'
+    bright = src.brightness
+    s = ''
+    for i,band in enumerate(bright.order):
+        if i:
+            s += ', '
+        s += '%s=%.3f' % (band, getattr(bright, band))
+    return s
 
 def create_tims(blobwcs, blobmask, timargs):
     from legacypipe.bits import DQ_BITS
@@ -2679,6 +2748,15 @@ def _initialize_models(src):
                         src.getShape()).copy()
         exp = src.copy()
         oldmodel = 'exp'
+    elif isinstance(src, SersicGalaxy):
+        psf = PointSource(src.getPosition(), src.getBrightness()).copy()
+        rex = RexGalaxy(src.getPosition(), src.getBrightness(),
+                        LogRadius(np.log(src.getShape().re))).copy()
+        dev = DevGalaxy(src.getPosition(), src.getBrightness(),
+                        src.getShape()).copy()
+        exp = ExpGalaxy(src.getPosition(), src.getBrightness(),
+                        src.getShape()).copy()
+        oldmodel = 'ser'
     return oldmodel, psf, rex, dev, exp
 
 class SourceModels(object):
@@ -2708,7 +2786,7 @@ class SourceModels(object):
             mods = []
             sh = tim.shape
             ie = tim.getInvError()
-            for src in srcs:
+            for srci,src in enumerate(srcs):
                 if src is None:
                     mod = None
                 else:
@@ -2875,7 +2953,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
             #print('REX is not a fractionally better fit, keeping', oldkeepmod)
             keepmod = oldkeepmod
 
-    if not ('exp' in chisqs or 'dev' in chisqs):
+    if not ('exp' in chisqs or 'dev' in chisqs or 'ser' in chisqs):
         #print('No EXP or DEV; keeping', keepmod)
         return keepmod
 
@@ -2894,14 +2972,14 @@ def _select_model(chisqs, nparams, galaxy_margin):
     #print('EXP vs', keepmod, ':', expdiff)
     #print('DEV vs', keepmod, ':', devdiff)
 
-    if not (expdiff > cut or devdiff > cut):
+    if not (expdiff > cut or devdiff > cut) and not ('ser' in chisqs):
         #print('Keeping', keepmod)
         return keepmod
 
-    if expdiff > devdiff:
+    if expdiff >= max(cut, devdiff):
         #print('Upgrading to EXP: diff', expdiff)
         keepmod = 'exp'
-    else:
+    elif devdiff > max(cut, expdiff):
         #print('Upgrading to DEV: diff', expdiff)
         keepmod = 'dev'
 
@@ -2975,5 +3053,4 @@ def model_masks_to_blob_extent(tims, modelMasks, src, wcs, to_int=False):
         yhi = int(np.clip(np.ceil (yhi)+1, 0, h))
         xlo = int(np.clip(np.floor(xlo), 0, w))
         xhi = int(np.clip(np.ceil (xhi)+1, 0, w))
-
     return xlo,xhi,ylo,yhi

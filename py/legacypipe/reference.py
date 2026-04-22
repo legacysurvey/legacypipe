@@ -208,7 +208,7 @@ def get_reference_sources(survey, targetwcs, bands,
     info('Reference sources within this brick:', Counter([str(r) for r in refs.ref_cat[refs.in_bounds]]).most_common())
 
     # ensure bool columns
-    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
+    for col in ['isbright', 'ismedium', 'islargegalaxy', 'issgafit', 'iscluster', 'isgaia',
                 'istycho', 'freezeparams', 'isresolved', 'ismcloud', 'ignore_source']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
@@ -607,7 +607,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
 
     if clean_columns:
         keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
-                        'sources', 'islargegalaxy', 'freezeparams', 'keep_radius',
+                        'sources', 'islargegalaxy', 'issgafit', 'freezeparams', 'keep_radius',
                         'fitmode', 'isresolved', 'ismcloud', 'ignore_source',
                         'set_galaxy_maskbit']
         if extra_columns is not None:
@@ -711,6 +711,9 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
             # SGA-2025
             galaxies.islargegalaxy = np.array([c.startswith('L') for c in galaxies.ref_cat])
             galaxies.freezeparams = ((galaxies.fitmode & SGA_FITMODE['FREEZE']) != 0)
+            # SGA-fit sources -- except for "SGA galaxies" (ie, refcat != "L*")
+            galaxies.issgafit = np.logical_not(galaxies.islargegalaxy)
+            debug('Set is-sga-fit for', Counter(galaxies.issgafit))
 
             galaxies.set_galaxy_maskbit = reduce(np.logical_or, [
                 galaxies.freezeparams & galaxies.islargegalaxy,
