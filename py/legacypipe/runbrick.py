@@ -3952,7 +3952,8 @@ def _forced_phot_one(args):
                         windowed_peak=False,
                         timing=False, **kwargs)
     t1 = Time()
-    info('run_forced_phot:', (t1-t0))
+    th,tw = tim.shape
+    info('run_forced_phot: image size %ix%i, %i sources' % (tw, th, len(sub_cat)), (t1-t0))
 
     if F is not None:
         derivs = False

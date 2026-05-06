@@ -936,6 +936,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     if len(cat) == 0:
         return None
 
+    info('run_forced_phot: tim', tim, 'ceres?', ceres)
     if ps is not None:
         import pylab as plt
     opti = None
