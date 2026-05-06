@@ -118,7 +118,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --sub-blobs \
        --no-segmentation \
        --no-wise \
-       --release 202605 \
+       --release 2605 \
        --threads 32 \
        --skip-calibs \
        --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
