@@ -3855,7 +3855,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
             bnum[I] += iv * 1./bnea[I]
         # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
         # this ends up in arcsec units, not pixels
-        bden = T.psfdepth[Iphot,iband] * (4 * np.pi * (T.psfsize[Iphot,iband]/2.3548)**2)
+        bden = C.T.psfdepth[Iphot,iband] * (4 * np.pi * (C.T.psfsize[Iphot,iband]/2.3548)**2)
         # numerator and denominator are for the inverse-NEA!
         with np.errstate(divide='ignore', invalid='ignore'):
             nea  = den  / num
