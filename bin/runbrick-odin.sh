@@ -13,7 +13,8 @@
 #field="$1"
 #brick="$2"
 
-field=shela3456
+#field=shela3456
+field=shela
 brick="$1"
 
 outdir=$SCRATCH/odin-bricks-$field
@@ -112,6 +113,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --run odin \
        --brick $brick \
        --bands N419,N501,N673 \
+       --forced-bands u,g,r,i,z \
        --nsatur 2 \
        --coadd-bw \
        --rgb-stretch 1.5 \
@@ -119,7 +121,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --no-segmentation \
        --no-wise \
        --release 2605 \
-       --threads 32 \
+       --threads 128 \
        --skip-calibs \
        --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
        --checkpoint-period 300 \
