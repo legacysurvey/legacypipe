@@ -57,6 +57,7 @@ def main():
         'ra' : sweep_schema_ra(360),
         'blocks' : sweep_schema_blocks(36, 36),
         'blocksdr10' : sweep_schema_blocks(72, 36),
+        'blocksdr11' : sweep_schema_blocks(72, 36),
         'dec' : sweep_schema_dec(180),
         }
 
@@ -501,20 +502,20 @@ SWEEP_DTYPE = np.dtype([
     ('PSFDEPTH_W1', '>f4'),
     ('PSFDEPTH_W2', '>f4'),
     ('WISE_COADD_ID', 'S8'),
-    ('LC_FLUX_W1', '>f4', (17,)),
-    ('LC_FLUX_W2', '>f4', (17,)),
-    ('LC_FLUX_IVAR_W1', '>f4', (17,)),
-    ('LC_FLUX_IVAR_W2', '>f4', (17,)),
-    ('LC_NOBS_W1', '>i2', (17,)),
-    ('LC_NOBS_W2', '>i2', (17,)),
-    ('LC_MJD_W1', '>f8', (17,)),
-    ('LC_MJD_W2', '>f8', (17,)),
-    ('LC_FRACFLUX_W1', '>f4', (17,)),
-    ('LC_FRACFLUX_W2', '>f4', (17,)),
-    ('LC_RCHISQ_W1', '>f4', (17,)),
-    ('LC_RCHISQ_W2', '>f4', (17,)),
-    ('LC_EPOCH_INDEX_W1', '>i2', (17,)),
-    ('LC_EPOCH_INDEX_W2', '>i2', (17,)),
+    ('LC_FLUX_W1', '>f4', (25,)),
+    ('LC_FLUX_W2', '>f4', (25,)),
+    ('LC_FLUX_IVAR_W1', '>f4', (25,)),
+    ('LC_FLUX_IVAR_W2', '>f4', (25,)),
+    ('LC_NOBS_W1', '>i2', (25,)),
+    ('LC_NOBS_W2', '>i2', (25,)),
+    ('LC_MJD_W1', '>f8', (25,)),
+    ('LC_MJD_W2', '>f8', (25,)),
+    ('LC_FRACFLUX_W1', '>f4', (25,)),
+    ('LC_FRACFLUX_W2', '>f4', (25,)),
+    ('LC_RCHISQ_W1', '>f4', (25,)),
+    ('LC_RCHISQ_W2', '>f4', (25,)),
+    ('LC_EPOCH_INDEX_W1', '>i2', (25,)),
+    ('LC_EPOCH_INDEX_W2', '>i2', (25,)),
 #    ('FRACDEV', '>f4'),
 #    ('FRACDEV_IVAR', '>f4'),
     ('SHAPE_R', '>f4'),
@@ -601,7 +602,8 @@ def parse_args():
         help="if set, don't overwrite existing files (as a speed-up)")
     ap.add_argument('-I', "--ignore-errors", action='store_true')
 
-    ap.add_argument('-S', "--schema", choices=['blocks', 'blocksdr10', 'dec', 'ra'],
+    ap.add_argument('-S', "--schema",
+                    choices=['blocks', 'blocksdr10', 'blocksdr11', 'ra', 'dec'],
             default='blocks',
             help="""Decomposition schema. Still being tuned. """)
 
