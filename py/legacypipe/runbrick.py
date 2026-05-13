@@ -3792,10 +3792,18 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     Iphot = np.flatnonzero(do_phot)
     Nphot = len(Iphot)
-    # HACK -- replace the catalog brightnesses with the forced-photometry results!
+    # HACK -- replace the catalog brightnesses with the forced-photometry results
+    # to make model coadds
     orig_bright = [cat[i].brightness for i in Iphot]
+    fluxes = []
+    for b in clean_bands:
+        if 'flux_%s' % b in TF.get_columns():
+            fluxes.append(TF.get('flux_%s' % b))
+        else:
+            # This can happen because average_forced_phot only looks at the filters that actually exist
+            fluxes.append(np.zeros(len(TF), np.float32))
     for i in Iphot:
-        br = dict([(b, TF.get('flux_%s' % b)[i]) for b in clean_bands])
+        br = dict([(b, flux[i]) for b,flux in zip(clean_bands, fluxes)])
         cat[i].brightness = NanoMaggies(**br)
     phot_cat = [cat[i] for i in Iphot]
     phot_blob = T.blob[Iphot]
@@ -3803,7 +3811,10 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     both_args = [(phot_cat, phot_blob, blobmap, frozen_galaxies, ps, plots)
                  for tim in tims]
 
-    C = make_coadds(tims, forced_bands, targetwcs,
+    # Only create coadd products for a band if we actually have images overlapping this brick
+    existing_bands = set([im.band for im in ims])
+    existing_bands = [b for b in forced_bands if b in existing_bands]
+    C = make_coadds(tims, existing_bands, targetwcs,
                     mods=None, xy=ixy, apertures=apertures, apxy=apxy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
                     mjdminmax=False,
@@ -3821,11 +3832,22 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # 'AP', 'T', 'allmasks', 'coimgs', 'comods', 'coresids', 'cowimgs', 'galdetivs', 'maximgs', 'psfdetivs'
 
     # Save per-source measurements of the maps produced during coadding
-    cols = ['nobs', 'ngood', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']
-    for c in cols:
+    cols = [('nobs',     np.int16),
+            ('ngood',    np.int16),
+            ('anymask',  np.int16),
+            ('allmask',  np.int16),
+            ('psfsize',  np.float32),
+            ('psfdepth', np.float32),
+            ('galdepth', np.float32)]
+    for c,t in cols:
         X = C.T.get(c)
-        for i,band in enumerate(clean_bands):
-            TF.set('%s_%s' % (c, band), X[:,i])
+        for i,band in enumerate(existing_bands):
+            b = clean_map[band]
+            TF.set('%s_%s' % (c, b), X[:,i])
+        # Fill in empty columns for missing bands
+        for band in list(set(forced_bands) - set(existing_bands)):
+            b = clean_map[band]
+            TF.set('%s_%s' % (c, b), np.zeros(len(TF), t))
 
     # NEA
     # average NEA stats per band -- after psfsize,psfdepth computed.
@@ -3833,7 +3855,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     for band in clean_bands:
         T.set('nea_%s' % band, np.zeros(len(T), np.float32))
         T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
-    for iband,(band,cb_data) in enumerate(zip(forced_bands, C.mod_callback_data)):
+    for iband,(band,cb_data) in enumerate(zip(existing_bands, C.mod_callback_data)):
         num  = np.zeros(Nphot, np.float32)
         den  = np.zeros(Nphot, np.float32)
         bnum = np.zeros(Nphot, np.float32)
@@ -3878,13 +3900,21 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                     ('apflux_blobresid_%s', 'apflux_blobresid'),
                     ]:
         for iband,band in enumerate(clean_bands):
-            TF.set('%s_%s' % (dst, band), C.AP.get(src % band).astype(np.float32))
+            col = src % band
+            if col in C.AP.get_columns():
+                TF.set('%s_%s' % (dst, band), C.AP.get(col).astype(np.float32))
+            else:
+                TF.set('%s_%s' % (dst, band), np.zeros(len(TF), np.float32))
 
     cat2 = []
     for i,src in enumerate(cat):
         fluxes = {}
         for b in clean_bands:
-            fluxes[b] = TF.get('flux_%s' % b)[i]
+            col = 'flux_%s' % b
+            if col in TF.get_columns():
+                fluxes[b] = TF.get(col)[i]
+            else:
+                fluxes[b] = 0.
         if src is not None:
             src = src.copy()
             src.brightness = NanoMaggies(**fluxes)
@@ -3892,7 +3922,14 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     TF.bx = T.bx
     TF.by = T.by
-    TF.flux_ivar = np.vstack([TF.get('flux_ivar_%s' % b) for b in clean_bands]).T
+    fiv = []
+    for b in clean_bands:
+        col = 'flux_ivar_%s' % b
+        if col in TF.get_columns():
+            fiv.append(TF.get(col))
+        else:
+            fiv.append(np.zeros(len(TF), np.float32))
+    TF.flux_ivar = np.vstack(fiv).T
     ff, fftot = get_fiber_fluxes(
         cat2, TF, targetwcs, H, W, pixscale, clean_bands, plots=plots, ps=ps)
     for iband,band in enumerate(clean_bands):
