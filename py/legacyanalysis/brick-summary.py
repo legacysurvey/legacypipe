@@ -25,29 +25,34 @@ list of "*-nexp-BAND.fits.gz" files, pulls the brick names out, and
 reads the corresponding tractor files.  This is kind of an odd way to
 do it, but I'm sure it made sense to me at the time.
 
-This takes long enough to run on a full data release that you might
-want to run multiple threads by hand, eg,
+This takes long enough to run on a full data release that it's helpful
+to split it into chunks.  For example, for DR11 we did 1-degree RA
+slices:
 
-(for B in 30; do python -u legacyanalysis/brick-summary.py -o dr4-brick-summary-$B.fits /global/projecta/projectdirs/cosmo/work/dr4b/coadd/$B*/*/*-nexp-*.fits.gz > bs-$B.log 2>&1; done) &
+(for ((b=0; b<360; b++)); do
+  B=$(printf %03i $b);
+  find /pscratch/sd/y/yifeiluo/dr11/south/coadd/$B/ -name "*-nexp-*.fits.fz" > nexp-files-$B.txt
+  echo "python -u legacyanalysis/brick-summary.py -o dr11-south-brick-summary-$B.fits --file-list nexp-files-$B.txt > bs-$B.log 2>&1 &";
+done) > jobs.txt
 
-for a set of B, and then
+You can either run those commands in jobs.txt, or create and run a qdo queue:
 
-python legacyanalysis/brick-summary.py --merge -o brick-summary-dr4.fits dr4-brick-summary-*.fits
+for s in $(seq 0 359); do printf "%03i\n" $s; done | qdo load summary -
 
-to merge them into one file, and
+create script summary.sh:
 
-python legacyanalysis/brick-summary.py --plot brick-summary-dr4.fits
+#! /bin/bash
+# B = three-digit degrees eg 001
+B=$1
+python -u legacyanalysis/brick-summary.py -o dr11-south-brick-summary-$B.fits --file-list nexp-files-$B.txt > bs-$B.log 2>&1
 
-to make a couple of plots.
+DISPLAY= QDO_BATCH_PROFILE=perlmutter-shifter-mem qdo launch summary 360 --cores_per_worker 1 --walltime=4:00:00 --batchqueue=premium --batchopts "--image=docker:legacysurvey/legacypipe:DR11.0.6 -A m3592" --script "../bin/summary.sh" --keep_env
 
-Or, run this to generate a list of command-lines that you can copy-n-paste:
+and then, when that finishes,
 
-for ((b=0; b<36; b++)); do B=$(printf %02i $b); echo "python -u legacyanalysis/brick-summary.py --dr5 -o dr5-brick-summary-$B.fits /project/projectdirs/cosmo/work/legacysurvey/dr5/DR5_out/coadd/$B*/*/*-nexp-*.fits.fz > bs-$B.log 2>&1 &"; done
-
-python legacyanalysis/brick-summary.py --merge -o survey-brick-dr5.fits dr5-brick-summary-*.fits
+python legacyanalysis/brick-summary.py --merge -o survey-bricks-dr11-south.fits dr11-south-brick-summary-???.fits
 
 '''
-
 
 def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
     pb = parent.get_position(original=True).frozen()
@@ -102,7 +107,7 @@ def depth_hist(opt):
     else:
         surveys = dict(g='DECaLS', r='DECaLS', i='DECaLS', z='DECaLS')
         hemi='south'
-    dr = 'DR10'
+    dr = 'DR11'
 
     print('Read', len(T), 'bricks summarized in', opt.files[0])
     import pylab as plt
@@ -123,12 +128,14 @@ def depth_hist(opt):
     del bi
     del ibrick
 
-    print('Total sources:', sum(T.nobjs))
+    print('Maximum number of sources per brick:', np.max(T.nobjs))
+    print('Total sources:', sum(T.nobjs.astype(np.int64)))
     print('Approx area:', len(T)/16., 'sq deg')
     print('Area:', np.sum(T.area))
     print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
 
-    depthlo,depthhi = 21.5, 25.5
+    #depthlo,depthhi = 21.5, 25.5
+    depthlo,depthhi = 22.0, 26.0
     for band in 'griz':
         depth = T.get('psfdepth_%s' % band)
         nexp = T.get('nexp_%s' % band)
@@ -199,9 +206,9 @@ def plots(opt):
 
     decam = True
     if decam:
-        release = 'DECaLS DR10'
+        release = 'DR11-south'
     else: 
-        release = 'BASS+MzLS DR8'
+        release = 'DR11-north'
 
     if decam:
         # DECam
@@ -298,9 +305,11 @@ def plots(opt):
         [0.5], extent=[ax[1],ax[0],ax[2],ax[3]])
     plt.clf()
     print('DESI map contour obj:', C)
-    desi_map_boundaries = C.collections[0]
+    #desi_map_boundaries = C.collections[0]
+    desi_map_boundaries = C.allsegs[0]
     print('boundaries:', desi_map_boundaries)
-    paths = desi_map_boundaries.get_paths()
+    #paths = desi_map_boundaries.get_paths()
+    paths = desi_map_boundaries
     print('paths:', paths)
     
     def desi_map_outline():
@@ -308,11 +317,12 @@ def plots(opt):
         # for seg in segs:
         #     plt.plot(seg[:,0], seg[:,1], 'b-')
         for p in paths:
-            vv = []
-            for verts,code in p.iter_segments(curves=False):
-                #print('Vertices', verts, 'code', code)
-                vv.append(verts)
-            vv = np.array(vv)
+            # vv = []
+            # for verts,code in p.iter_segments(curves=False):
+            #     #print('Vertices', verts, 'code', code)
+            #     vv.append(verts)
+            # vv = np.array(vv)
+            vv = p
             print('vertices shape:', vv.shape)
             plt.plot(vv[:,0], vv[:,1], 'b-')
 
