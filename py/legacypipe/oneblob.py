@@ -1024,6 +1024,8 @@ class OneBlob(object):
             src = cat[srci]
             self.status('Model selection for source %i of %i' % (numi+1, len(Ibright)))
             self.debug('Initial model:', str(src))
+            if src is None:
+                continue
 
             cpu0 = time.process_time()
 
