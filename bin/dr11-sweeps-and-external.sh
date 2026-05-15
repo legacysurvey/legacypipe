@@ -31,15 +31,14 @@ mopup=true
 # ADM set the data release and hence the main input directory.
 dr=dr11
 drdir=/global/cfs/cdirs/cosmo/work/legacysurvey/$dr
-drdir=/pscratch/sd/a/adamyers/legacysurvey/$dr
 
 # ADM write to scratch.
 droutdir=$SCRATCH/$dr
 
 # ADM uncomment these to pull and enter the docker container.
-# ADM this is useful if NOT parallelizing across multiple nodes using srun.
-# shifterimg pull docker:legacysurvey/legacypipe:DR10.0.1
-# shifter --image docker:legacysurvey/legacypipe:DR10.0.1 bash
+# ADM this is useful if NOT parallelizing across nodes using srun.
+# shifterimg pull docker:legacysurvey/legacypipe:DR11.0.1
+# shifter --image docker:legacysurvey/legacypipe:DR11.0.1 bash
 
 # ADM example set-ups for using custom code are commented out!
 # ADM the UN-commented code is for the docker container.
@@ -47,11 +46,11 @@ export LEGACYPIPE_DIR=/src/legacypipe
 
 # ADM an abstruse way of getting my home directory as $HOME
 # ADM can be redefined in docker containers.
-HOM=`eval echo "~$USER"`
+#HOM=`eval echo "~$USER"`
 # ADM the next line can be uncommented for, e.g., developing code.
-export LEGACYPIPE_DIR=$HOM/git/legacypipe/
+#export LEGACYPIPE_DIR=$HOM/git/legacypipe/
 
-export PYTHONPATH=/usr/local/lib/python:$LEGACYPIPE_DIR/py
+#export PYTHONPATH=/usr/local/lib/python:$LEGACYPIPE_DIR/py
 
 # ADM location of external-match files.
 export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
@@ -61,14 +60,15 @@ export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
 # ADM a sensible number of processors on which to run.
 export NUMPROC=$((SLURM_CPUS_ON_NODE / 2))
 # ADM the sweeps need more memory since we started to write three files.
-# ADM $SLURM_CPUS_ON_NODE / 6 works well for dr10.
+# ADM $SLURM_CPUS_ON_NODE / 6 works well for dr11, and takes ~2 hours.
+# ADM although some mopping up with $SLURM_CPUS_ON_NODE / 30 is needed.
 export SWEEPS_NUMPROC=$((SLURM_CPUS_ON_NODE / 6))
 
 # ADM if the bricks and matching files are common to all surveys then
 # ADM uncomment the next line and comment the subsequent for line.
 #for survey in ""
 # ADM run once for each of the DECaLS and MzLS/BASS surveys.
-for survey in south
+for survey in south north
 do
 
     # ADM the file that holds general information about LS bricks.
