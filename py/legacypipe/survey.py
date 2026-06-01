@@ -1337,7 +1337,7 @@ class LegacySurveyData(object):
 
         elif filetype in ['blobmap']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
-                                     'blobs-%s.fits.fz' % (brick)))
+                                     'blobs-%s.fits.gz' % (brick)))
 
         elif filetype in ['blobmask']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
