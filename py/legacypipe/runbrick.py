@@ -3812,7 +3812,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                  for tim in tims]
 
     # Only create coadd products for a band if we actually have images overlapping this brick
-    existing_bands = set([im.band for im in ims])
+    existing_bands = set([tim.band for tim in tims])
     existing_bands = [b for b in forced_bands if b in existing_bands]
     C = make_coadds(tims, existing_bands, targetwcs,
                     mods=None, xy=ixy, apertures=apertures, apxy=apxy,
