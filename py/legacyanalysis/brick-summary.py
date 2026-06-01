@@ -99,14 +99,17 @@ def add_brick_data(T, north):
 def depth_hist(opt):
     filename = opt.files[0]
     T = fits_table(filename)
-    north = 'north' in filename
+    #north = 'north' in filename
+    north = opt.north
 
     if north:
         surveys = dict(g='BASS', r='BASS', z='MzLS')
         hemi='north'
+        bands = ['g','r','z']
     else:
         surveys = dict(g='DECaLS', r='DECaLS', i='DECaLS', z='DECaLS')
         hemi='south'
+        bands = ['g','r','i','z']
     dr = 'DR11'
 
     print('Read', len(T), 'bricks summarized in', opt.files[0])
@@ -136,7 +139,7 @@ def depth_hist(opt):
 
     #depthlo,depthhi = 21.5, 25.5
     depthlo,depthhi = 22.0, 26.0
-    for band in 'griz':
+    for band in bands:
         depth = T.get('psfdepth_%s' % band)
         nexp = T.get('nexp_%s' % band)
         lo,hi = depthlo-0.05, depthhi+0.05
@@ -178,6 +181,15 @@ def plots(opt):
     from astrometry.util.plotutils import antigray
     import tractor.sfd
 
+    north = opt.north
+    south = not north
+    griz = south
+    decam = south
+    if griz:
+        bands = ['g','r','i','z']
+    else:
+        bands = ['g','r','z']
+
     T = fits_table(opt.files[0])
     print('Read', len(T), 'bricks summarized in', opt.files[0])
     import pylab as plt
@@ -202,15 +214,15 @@ def plots(opt):
     print('Approx area:', len(T)/16., 'sq deg')
     print('Area:', np.sum(T.area))
     print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
-    print('g,r,i,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_i > 0) * (T.nexp_z > 0)) / 16.)
+    if griz:
+        print('g,r,i,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_i > 0) * (T.nexp_z > 0)) / 16.)
 
-    decam = True
-    if decam:
+    if south:
         release = 'DR11-south'
-    else: 
+    else:
         release = 'DR11-north'
 
-    if decam:
+    if south:
         # DECam
         #ax = [360, 0, -21, 36]
         ax = [300, -60, -90, 36]
@@ -311,7 +323,7 @@ def plots(opt):
     #paths = desi_map_boundaries.get_paths()
     paths = desi_map_boundaries
     print('paths:', paths)
-    
+
     def desi_map_outline():
         # segs = desi_map_boundaries.get_segments()
         # for seg in segs:
@@ -376,7 +388,7 @@ def plots(opt):
     #sys.exit(0)
     plt.clf()
     depthlo,depthhi = 22.0, 26.0
-    for band in 'griz':
+    for band in bands:
         depth = T.get('galdepth_%s' % band)
         ha = dict(histtype='step',  bins=50, range=(depthlo,depthhi))
         ccmap = dict(g='g', r='r', i='k', z='m')
@@ -388,7 +400,7 @@ def plots(opt):
     plt.title(release)
     plt.savefig('galdepths.png')
 
-    for band in 'griz':
+    for band in bands:
         depth = T.get('galdepth_%s' % band)
         nexp = T.get('nexp_%s' % band)
         #lo,hi = 22.0-0.05, 24.2+0.05
@@ -421,7 +433,7 @@ def plots(opt):
         plt.legend(loc='upper right')
         plt.savefig('depth-hist-%s.png' % band)
 
-    for band in 'griz':
+    for band in bands:
         plt.clf()
         desi_map()
         N = T.get('nexp_%s' % band)
@@ -682,6 +694,11 @@ def main():
         depth_hist(opt)
         return
 
+    if opt.north:
+        bands = ['g','r','z']
+    else:
+        bands = ['g','r','i','z']
+
     fns.sort()
     print(len(fns), 'nexp files')
     if len(fns) == 1:
@@ -691,15 +708,6 @@ def main():
 
     brickset = set()
     bricklist = []
-    gn = []
-    rn = []
-    iin = []
-    zn = []
-
-    gnhist = []
-    rnhist = []
-    inhist = []
-    znhist = []
 
     nnhist = 11
 
@@ -714,33 +722,25 @@ def main():
     nser  = []
     ndup  = []
 
-    gpsfsize = []
-    rpsfsize = []
-    ipsfsize = []
-    zpsfsize = []
-
-    gpsfdepth = []
-    rpsfdepth = []
-    ipsfdepth = []
-    zpsfdepth = []
-    ggaldepth = []
-    rgaldepth = []
-    igaldepth = []
-    zgaldepth = []
+    psfsizes = []
+    psfdepths = []
+    galdepths = []
+    nhists = []
+    nlists = []
+    trans = []
+    cosky = []
+    for b in bands:
+        psfsizes.append([])
+        psfdepths.append([])
+        galdepths.append([])
+        nhists.append([])
+        nlists.append([])
+        trans.append([])
+        cosky.append([])
 
     wise_nobs = []
     wise_trans = []
-
     ebv = []
-    gtrans = []
-    rtrans = []
-    itrans = []
-    ztrans = []
-
-    gcosky = []
-    rcosky = []
-    icosky = []
-    zcosky = []
 
     bricks = fits_table('survey-bricks.fits.gz')
 
@@ -760,15 +760,14 @@ def main():
             try:
                 tfn = os.path.join(dirprefix, 'tractor', brick[:3], 'tractor-%s.fits'%brick)
                 print('Tractor filename', tfn)
-                T = fits_table(tfn, columns=['brick_primary', 'type',
-                                             'psfsize_g',  'psfsize_r',  'psfsize_i',  'psfsize_z',
-                                             'psfdepth_g', 'psfdepth_r', 'psfdepth_i', 'psfdepth_z',
-                                             'galdepth_g', 'galdepth_r', 'galdepth_i', 'galdepth_z',
-                                             'ebv',
-                                             'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_i', 'mw_transmission_z',
-                                             'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
-                                             'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
-                # we need tho primary header, not the table-hdu header!
+                cols = ['brick_primary', 'type', 'ebv',
+                        'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
+                        'mw_transmission_w1', 'mw_transmission_w2',
+                        'mw_transmission_w3', 'mw_transmission_w4']
+                for b in bands:
+                    cols.extend(['psfsize_'+b, 'psfdepth_'+b, 'galdepth_'+b, 'mw_transmission_'+b])
+                T = fits_table(tfn, columns=cols)
+                # we need the primary header, not the table-hdu header!
                 #Thdr = T.get_header()
                 Thdr = fitsio.read_header(tfn)
             except:
@@ -780,15 +779,11 @@ def main():
 
             brickset.add(brick)
             bricklist.append(brick)
-            gn.append(0)
-            rn.append(0)
-            iin.append(0)
-            zn.append(0)
 
-            gnhist.append([0 for i in range(nnhist)])
-            rnhist.append([0 for i in range(nnhist)])
-            inhist.append([0 for i in range(nnhist)])
-            znhist.append([0 for i in range(nnhist)])
+            for arr in nhists:
+                arr.append([0 for i in range(nnhist)])
+            for arr in nlists:
+                arr.append(0)
 
             index = -1
             ibrick = np.nonzero(bricks.brickname == brick)[0][0]
@@ -807,20 +802,16 @@ def main():
             ndup.append(types['DUP'])
             print('N sources', nsrcs[-1])
 
-            gpsfsize.append(np.median(T.psfsize_g))
-            rpsfsize.append(np.median(T.psfsize_r))
-            ipsfsize.append(np.median(T.psfsize_i))
-            zpsfsize.append(np.median(T.psfsize_z))
-
-            gpsfdepth.append(np.median(T.psfdepth_g))
-            rpsfdepth.append(np.median(T.psfdepth_r))
-            ipsfdepth.append(np.median(T.psfdepth_i))
-            zpsfdepth.append(np.median(T.psfdepth_z))
-
-            ggaldepth.append(np.median(T.galdepth_g))
-            rgaldepth.append(np.median(T.galdepth_r))
-            igaldepth.append(np.median(T.galdepth_i))
-            zgaldepth.append(np.median(T.galdepth_z))
+            for arr,b in zip(psfsizes, bands):
+                arr.append(np.median(T.get('psfsize_'+b)))
+            for arr,b in zip(psfdepths, bands):
+                arr.append(np.median(T.get('psfdepth_'+b)))
+            for arr,b in zip(galdepths, bands):
+                arr.append(np.median(T.get('galdepth_'+b)))
+            for arr,b in zip(trans, bands):
+                arr.append(np.median(T.get('mw_transmission_'+b)))
+            for arr,b in zip(cosky, bands):
+                arr.append(Thdr.get('COSKY_'+b, 0.))
 
             wise_nobs.append(np.median(
                 np.vstack((T.nobs_w1, T.nobs_w2, T.nobs_w3, T.nobs_w4)).T,
@@ -831,17 +822,6 @@ def main():
                            T.mw_transmission_w3,
                            T.mw_transmission_w4)).T,
                            axis=0))
-
-            gtrans.append(np.median(T.mw_transmission_g))
-            rtrans.append(np.median(T.mw_transmission_r))
-            itrans.append(np.median(T.mw_transmission_i))
-            ztrans.append(np.median(T.mw_transmission_z))
-
-            gcosky.append(Thdr.get('COSKY_G', 0.))
-            rcosky.append(Thdr.get('COSKY_R', 0.))
-            icosky.append(Thdr.get('COSKY_I', 0.))
-            zcosky.append(Thdr.get('COSKY_Z', 0.))
-
             ebv.append(np.median(T.ebv))
 
             br = bricks[ibrick]
@@ -869,10 +849,11 @@ def main():
         filepart = filepart.replace('.fits.fz', '')
         band = filepart[-1]
         print('File:', filepart, 'band', band)
-        assert(band in 'griz')
+        assert(band in bands)
 
-        nlist,nhist = dict(g=(gn,gnhist), r=(rn,rnhist),
-                           i=(iin,inhist), z=(zn,znhist))[band]
+        i = bands.index(band)
+        nlist = nlists[i]
+        nhist = nhists[i]
 
         upix = fitsio.read(fn).flat[U]
         med = np.median(upix)
@@ -894,14 +875,10 @@ def main():
     T.brickname = np.array(bricklist)
     T.ra  = bricks.ra [ibricks]
     T.dec = bricks.dec[ibricks]
-    T.nexp_g = np.array(gn).astype(np.int16)
-    T.nexp_r = np.array(rn).astype(np.int16)
-    T.nexp_i = np.array(iin).astype(np.int16)
-    T.nexp_z = np.array(zn).astype(np.int16)
-    T.nexphist_g = np.array(gnhist).astype(np.int32)
-    T.nexphist_r = np.array(rnhist).astype(np.int32)
-    T.nexphist_i = np.array(inhist).astype(np.int32)
-    T.nexphist_z = np.array(znhist).astype(np.int32)
+    for arr,b in zip(nlists, bands):
+        T.set('nexp_'+b, np.array(arr).astype(np.int16))
+    for arr,b in zip(nhists, bands):
+        T.set('nexphist_'+b, np.array(arr).astype(np.int32))
     T.nobjs  = np.array(nsrcs).astype(np.int32)
     T.npsf   = np.array(npsf ).astype(np.int32)
     T.nsimp  = np.array(nsimp).astype(np.int32)
@@ -911,35 +888,25 @@ def main():
     T.ncomp  = np.array(ncomp).astype(np.int32)
     T.nser   = np.array(nser ).astype(np.int32)
     T.ndup   = np.array(ndup ).astype(np.int32)
-    T.psfsize_g = np.array(gpsfsize).astype(np.float32)
-    T.psfsize_r = np.array(rpsfsize).astype(np.float32)
-    T.psfsize_i = np.array(ipsfsize).astype(np.float32)
-    T.psfsize_z = np.array(zpsfsize).astype(np.float32)
+    for arr,b in zip(psfsizes, bands):
+        T.set('psfsize_'+b, np.array(arr).astype(np.float32))
     with np.errstate(divide='ignore'):
-        T.psfdepth_g = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(gpsfdepth))))).astype(np.float32)
-        T.psfdepth_r = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(rpsfdepth))))).astype(np.float32)
-        T.psfdepth_i = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(ipsfdepth))))).astype(np.float32)
-        T.psfdepth_z = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(zpsfdepth))))).astype(np.float32)
-        T.galdepth_g = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(ggaldepth))))).astype(np.float32)
-        T.galdepth_r = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(rgaldepth))))).astype(np.float32)
-        T.galdepth_i = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(igaldepth))))).astype(np.float32)
-        T.galdepth_z = (-2.5*(-9.+np.log10(5.*np.sqrt(1. / np.array(zgaldepth))))).astype(np.float32)
-    for k in ['psfdepth_g', 'psfdepth_r', 'psfdepth_z', 'galdepth_g', 'galdepth_r', 'galdepth_z']:
-        v = T.get(k)
-        v[np.logical_not(np.isfinite(v))] = 0.
+        for arr,b in zip(psfdepths, bands):
+            d = (-2.5*(np.log10(5.*np.sqrt(1. / np.array(arr))) - 9)).astype(np.float32)
+            d[np.logical_not(np.isfinite(d))] = 0.
+            T.set('psfdepth_'+b, d)
+        for arr,b in zip(galdepths, bands):
+            d = (-2.5*(np.log10(5.*np.sqrt(1. / np.array(arr))) - 9)).astype(np.float32)
+            d[np.logical_not(np.isfinite(d))] = 0.
+            T.set('galdepth_'+b, d)
     T.ebv = np.array(ebv).astype(np.float32)
-    T.trans_g = np.array(gtrans).astype(np.float32)
-    T.trans_r = np.array(rtrans).astype(np.float32)
-    T.trans_i = np.array(itrans).astype(np.float32)
-    T.trans_z = np.array(ztrans).astype(np.float32)
-    T.cosky_g = np.array(gcosky).astype(np.float32)
-    T.cosky_r = np.array(rcosky).astype(np.float32)
-    T.cosky_i = np.array(icosky).astype(np.float32)
-    T.cosky_z = np.array(zcosky).astype(np.float32)
-    T.ext_g = -2.5 * np.log10(T.trans_g)
-    T.ext_r = -2.5 * np.log10(T.trans_r)
-    T.ext_i = -2.5 * np.log10(T.trans_i)
-    T.ext_z = -2.5 * np.log10(T.trans_z)
+    for arr,b in zip(trans, bands):
+        tr = np.array(arr)
+        T.set('trans_'+b, tr.astype(np.float32))
+        ext = -2.5 * np.log10(tr)
+        T.set('ext_'+b, ext.astype(np.float32))
+    for arr,b in zip(cosky, bands):
+        T.set('cosky_'+b, np.array(arr).astype(np.float32))
     T.wise_nobs = np.array(wise_nobs).astype(np.int16)
     T.trans_wise = np.array(wise_trans).astype(np.float32)
     T.ext_w1 = -2.5 * np.log10(T.trans_wise[:,0])
