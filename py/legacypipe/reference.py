@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 from collections import Counter
 import fitsio
+from functools import reduce
 from astrometry.util.fits import fits_table, merge_tables
 
 import logging
@@ -209,16 +210,25 @@ def get_reference_sources(survey, targetwcs, bands,
 
     # ensure bool columns
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'issgafit', 'iscluster', 'isgaia',
-                'istycho', 'freezeparams', 'isresolved', 'ismcloud', 'ignore_source']:
+                'istycho', 'freezeparams', 'isresolved', 'ismcloud', 'ignore_source',
+                'set_galaxy_maskbit']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
             debug('Adding False values for missing column "%s" in refs' % col)
 
-    # drop SGA-parent galaxies that are outside the brick area.
+    debug('freezeparams:', Counter(refs.freezeparams))
+
+    # We want to avoid keeping galaxies that are outside the brick and
+    # have source models that are not frozen.  This should only happen
+    # with the SGA-parent catalog.  But for the SGA-ellipse catalog,
+    # we also need to keep galaxies that are going to set MASKBITS
+    # values - RESOLVED and FIXGEO.
     keep = np.ones(len(refs), bool)
     keep[refs.islargegalaxy *
          np.logical_not(refs.in_bounds) *
-         np.logical_not(refs.freezeparams)] = False
+         np.logical_not(reduce(np.logical_or, [refs.freezeparams,
+                                               refs.isresolved,
+                                               refs.set_galaxy_maskbit]))] = False
     refs.cut(keep)
     del keep
     debug('Dropped non-frozen galaxies outside the brick:', len(refs), 'refs')
@@ -343,9 +353,10 @@ def fix_gaia(gaia, bands):
 
     # Including DECam griz, plus the bands we're actually processing
     bb = ['g','r','i','z']
-    for band in bands:
-        if not band in bb:
-            bb.append(band)
+    if bands is not None:
+        for band in bands:
+            if not band in bb:
+                bb.append(band)
     mags = gaia_to_decam(gaia, bb)
     for band,mag in zip(bb, mags):
         # no color terms - skip
@@ -925,7 +936,7 @@ def get_galaxy_sources(galaxies, bands):
                 src = typ(pos, bright, shape, sersic)
             else:
                 raise RuntimeError('Unknown SGA-ellipse source type "%s"' % typ)
-            debug('Created', src)
+            #debug('Created', src)
             if missing_band:
                 src.needs_initial_flux = True
             assert(np.isfinite(src.getLogPrior()))
