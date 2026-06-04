@@ -151,21 +151,21 @@ def summary_plots(summaryfn, ps, drname):
 
 if __name__ == '__main__':
     north = False
-    if north == True:
-        outfn = 'dr8-north-depth-concat.fits'
-        summaryfn = 'dr8-north-depth-summary.fits'
-        allfn = 'dr8-north-depth.fits'
-        basedir = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/north'
+    if north:
+        outfn = 'dr11-north-depth-concat.fits'
+        summaryfn = 'dr11-north-depth-summary.fits'
+        allfn = 'dr11-north-depth.fits'
+        #basedir = '/pscratch/sd/y/yifeiluo/dr11/north'
+        basedir = '/dvs_ro/cfs/cdirs/cosmo/data/legacysurvey/dr11/north'
         summarize_depths(basedir, outfn, summaryfn, allfn)
-
         ps = PlotSequence('depth')
-        summary_plots(summaryfn, ps, 'BASS+MzLS DR8')
+        summary_plots(summaryfn, ps, 'LS DR11-north')
     else:
         outfn = 'dr11-south-depth-concat.fits'
         summaryfn = 'dr11-south-depth-summary.fits'
         allfn = 'dr11-south-depth.fits'
-        #basedir = '/dvs_ro/cfs/cdirs/cosmo/data/legacysurvey/dr10/south'
-        basedir = '/pscratch/sd/y/yifeiluo/dr11/south'
+        basedir = '/dvs_ro/cfs/cdirs/cosmo/data/legacysurvey/dr11/south'
+        #basedir = '/pscratch/sd/y/yifeiluo/dr11/south'
         summarize_depths(basedir, outfn, summaryfn, allfn)
         ps = PlotSequence('depth')
         summary_plots(summaryfn, ps, 'LS DR11-south')
