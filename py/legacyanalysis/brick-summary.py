@@ -699,6 +699,8 @@ def main():
             for col in T2.get_columns():
                 print('Updating', col)
                 T.get(col)[I] = T2.get(col)
+        # Update in_desi etc for the original file too
+        add_brick_data(T, opt.north)
         T.writeto(opt.outfn)
         print('Wrote', opt.outfn)
         return
