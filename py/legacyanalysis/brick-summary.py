@@ -655,6 +655,7 @@ def main():
     parser.add_argument('-o', '--out', dest='outfn', help='Output filename',
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
+    parser.add_argument('--update', help='Update the given file with rows from the arguments')
     parser.add_argument('--north', action='store_true', default=False, help='Northern survey?')
     parser.add_argument('--plot', action='store_true', help='Plot results')
     parser.add_argument('--depth-hist', action='store_true', help='Depth histograms')
@@ -682,6 +683,22 @@ def main():
 
         add_brick_data(T, opt.north)
 
+        T.writeto(opt.outfn)
+        print('Wrote', opt.outfn)
+        return
+
+    if opt.update:
+        T = fits_table(opt.update)
+        print('Read', len(T), 'from', opt.update)
+        brickname_map = dict([(b,i) for i,b in enumerate(T.brickname)])
+        for fn in fns:
+            T2 = fits_table(fn)
+            print('Read', len(T2), 'from', fn)
+            add_brick_data(T2, opt.north)
+            I = np.array([brickname_map[b] for b in T2.brickname])
+            for col in T2.get_columns():
+                print('Updating', col)
+                T.get(col)[I] = T2.get(col)
         T.writeto(opt.outfn)
         print('Wrote', opt.outfn)
         return
