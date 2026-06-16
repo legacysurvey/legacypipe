@@ -34,8 +34,6 @@ export LARGEGALAXIES_CAT=$COSMO/work/legacysurvey/sga/2025/SGA2025-ellipse-v1.5-
 
 export DUST_DIR=$COSMO/data/dust/v0_1
 
-#export GAIA_CAT_DIR=$COSMO/data/gaia/edr3/healpix
-#export GAIA_CAT_VER=E
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_VER=3
 export GAIA_CAT_PREFIX=healpix
@@ -48,6 +46,13 @@ unset SKY_TEMPLATE_DIR
 
 # PYTHONPATH is set in the container.
 #export PYTHONPATH=/usr/local/lib/python:/usr/local/lib/python3.6/dist-packages:/src/unwise_psf/py:.
+
+#export LEGACYPIPE_DIR=/src/legacypipe/py
+
+# Local
+# export PYTHONPATH=/global/homes/d/dstn/tractor:${PYTHONPATH}
+export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
+export PYTHONPATH=$LEGACYPIPE_DIR:${PYTHONPATH}
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -105,7 +110,6 @@ echo "--------------------------------------------------------------------------
 #export PYTHONPATH=.:${PYTHONPATH}
 #cd $LEGACYPIPE_DIR
 
-export LEGACYPIPE_DIR=/src/legacypipe/py
 
 python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --skip \
@@ -121,14 +125,14 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --no-segmentation \
        --no-wise \
        --release 2605 \
-       --threads 128 \
+       --threads 32 \
        --skip-calibs \
        --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
        --checkpoint-period 300 \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
        --outdir $outdir \
-       --write-stage srcs \
        >> $log 2>&1
+#       --write-stage srcs \
 
 #       --stage image_coadds \
 #     --stage image_coadds --minimal-coadds \

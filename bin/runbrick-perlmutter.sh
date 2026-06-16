@@ -5,7 +5,7 @@
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
-outdir=$SCRATCH/dr11
+outdir=$SCRATCH/dr11-dstn
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
@@ -13,12 +13,13 @@ export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=3
 
 export DUST_DIR=$COSMO/data/dust/v0_1
-export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo6/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
-export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo6
-export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo6/unwise-catalog/mod
+export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo11/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
+export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo11
+export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo8/unwise-catalog/mod
 
 export TYCHO2_KD_DIR=$COSMO/staging/tycho2
-export LARGEGALAXIES_CAT=$COSMO/work/legacysurvey/sga/2025/SGA2025-ellipse-dr11a-v0.10.kd.fits
+#export LARGEGALAXIES_CAT=$COSMO/work/legacysurvey/sga/2025/SGA2025-ellipse-dr11a-v0.10.kd.fits
+export LARGEGALAXIES_CAT=$COSMO/work/legacysurvey/sga/2025/SGA2025-ellipse-v1.6-dr11-south.kd.fits
 export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr11/calib/sky_pattern
 
 unset BLOB_MASK_DIR
@@ -69,6 +70,10 @@ echo "--------------------------------------------------------------------------
 echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
+# Local
+export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
+export PYTHONPATH=$LEGACYPIPE_DIR:${PYTHONPATH}
+
 python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
      --run south \
      --brick "$brick" \
@@ -81,14 +86,15 @@ python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
      --survey-dir "$LEGACY_SURVEY_DIR" \
      --outdir "$outdir" \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
-     --checkpoint-period 120 \
+     --checkpoint-period 600 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --write-stage srcs \
-     --release 11000 \
-     --threads 32 \
-     --stage fitblobs \
+     --release 11010 \
+     --threads 64 \
+      -v \
       >> "$log" 2>&1
 
+#     --write-stage srcs \
+    #     --stage fitblobs \
 #     --stage image_coadds \
 #     --bands g,r,i,z \
 #     --cache-dir "$CACHE_DIR" \

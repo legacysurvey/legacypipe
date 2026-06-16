@@ -993,6 +993,7 @@ class LegacySurveyData(object):
         from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
         from legacypipe.suprime import SuprimeImage
+        from legacypipe.lsst import LsstImage
         from collections import OrderedDict
         from legacypipe.bits import MASKBITS, MASKBITS_DESCRIPTIONS
 
@@ -1047,6 +1048,9 @@ class LegacySurveyData(object):
             'panstarrs' : PanStarrsImage,
             'wiro'   : WiroImage,
             'suprimecam': SuprimeImage,
+            'lsstcomcam': LsstImage,
+            'lsst': LsstImage,
+            'comcam': LsstImage,
             }
 
         self.allbands = allbands

@@ -33,7 +33,8 @@ def debug(*args):
     log_debug(logger, args)
 
 
-CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam']
+CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam',
+         'lsstcomcam']
 
 def ptime(text,t0):
     tnow=Time()
