@@ -17,6 +17,7 @@ calib files required.
 '''
 class HscImage(LegacySurveyImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
+        print('HscImage.__init__')
         if ccd is not None:
             ccd.plver = 'xxx'
             ccd.procdate = 'xxx'

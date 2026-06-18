@@ -6,7 +6,6 @@ import numpy as np
 from legacypipe.survey import LegacySurveyData
 from legacypipe.ps1cat import ps1cat
 from legacypipe.gaiacat import GaiaCatalog
-#from legacypipe.gaiacat import GaiaCatalog
 from tractor import ModelMask
 
 logger = logging.getLogger('legacypipe.new-camera-setup')
@@ -22,22 +21,16 @@ def main():
     from legacyzpts.legacy_zeropoints import CAMERAS
     import argparse
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--camera', required=True)
-
     parser.add_argument('--image-hdu', default=0, type=int, help='Read image data from the given HDU number')
-
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='More logging')
-
     parser.add_argument('--plots', action='store_true', default=False,
                         help='Make plots?')
     parser.add_argument('--gaia-photom', default=False, action='store_true',
                         help='Use Gaia rather than PS-1 for photometric cal.')
-
     parser.add_argument('image', metavar='image-filename', help='Image filename to read')
-
     opt = parser.parse_args()
 
     if opt.verbose:
@@ -145,7 +138,6 @@ def main():
     info('Will read image pixels from file        ', img.imgfn, 'HDU', img.hdu)
     info('Will read inverse-variance map from file', img.wtfn,  'HDU', img.wt_hdu)
     info('Will read data-quality map from file    ', img.dqfn,  'HDU', img.dq_hdu)
-
     info('Will read images from these FITS HDUs:', img.get_extension_list())
 
     # test funpack_files?
@@ -370,6 +362,17 @@ def main():
         plt.xlabel('Image pixels * sqrt(invvar)  (sigma)')
         plt.title('Is uncertainty map correct?')
         ps.savefig()
+
+
+    # Try to create the PSF model
+    print('Creating calibs...')
+    do_psf = do_sky = True
+    img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
+                   survey=survey, ps=ps)
+                   #survey_blob_mask=survey_blob_mask,
+                   #halos=have_zpt,
+                   #subtract_largegalaxies=subtract_largegalaxies)
+    #img.run_psfex(ps=ps)
 
     # Read PSF model
     print('Reading FWHM...')

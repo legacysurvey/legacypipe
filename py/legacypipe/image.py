@@ -73,6 +73,7 @@ class LegacySurveyImage(object):
         *get_tractor_image*.
 
         '''
+        print('LegacySurveyImage.__init__')
         super().__init__()
         self.sky_before_psfex = False
         self.survey = survey
@@ -85,6 +86,7 @@ class LegacySurveyImage(object):
             self.band = None
             return
 
+        print('image.py __init__: ccd is', ccd, 'image_fn is', image_fn)
         if ccd is None and image_fn is None:
             raise RuntimeError('Either "ccd" or "image_fn" must be set')
 
@@ -1408,6 +1410,8 @@ class LegacySurveyImage(object):
         Ti = None
         header = None
         for fn in tryfns:
+            if fn is None:
+                continue
             if not os.path.exists(fn):
                 continue
             T = fits_table(fn)
@@ -1524,12 +1528,19 @@ class LegacySurveyImage(object):
         return tmpimgfn,tmpmaskfn
 
     def run_se(self, imgfn, maskfn):
+        import tempfile
         trymakedirs(self.sefn, dir=True)
         with self.survey.get_se_dir() as sedir:
             # We write the SE catalog to a temp file then rename, to avoid
             # partially-written outputs.
             tmpfn = os.path.join(os.path.dirname(self.sefn),
                                  'tmp-' + os.path.basename(self.sefn))
+            #f,tmpfn = tempfile.mkstemp(dir=os.path.dirname(self.sefn),
+            #                           prefix='tmp-se',
+            #                           suffix='.fits')
+            #os.close(f)
+            #print('Using temp output filename for SE:', tmpfn)
+
             args = [
                 'source-extractor',
                 '-c', os.path.join(sedir, self.camera + '.se'),
@@ -1572,6 +1583,8 @@ class LegacySurveyImage(object):
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.get_psfex_conf()
         with self.survey.get_se_dir() as sedir:
+            print('SEfn:', self.sefn)
+
             cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
             info('run_psfex:', cmd)
             rtn = os.system(cmd)
