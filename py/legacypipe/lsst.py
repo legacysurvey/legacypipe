@@ -31,6 +31,14 @@ class LsstImage(HscImage):
         # print('LSST: setting SE filename:', self.sefn)
         # print('LSST: setting PsfEx filename:', self.psffn)
 
+        # Try grabbing fwhm from PSFEx file, if it exists.
+        if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
+            try:
+                # PSF model file may not have been created yet...
+                self.fwhm = self.get_fwhm(None, None)
+            except:
+                pass
+
     def set_calib_filenames(self):
         # Calib filenames
         calibdir = self.survey.get_calib_dir()
@@ -63,9 +71,22 @@ class LsstImage(HscImage):
         return primhdr.get('PROGRAM', '')
     def get_ccdname(self, primhdr, hdr):
         return primhdr['DETNAME'].strip().upper()
+
     def get_fwhm(self, primhdr, imghdr):
-        print("HACK - no FWHM readily available")
-        return 5.0
+        psf = None
+        try:
+            # PSF model file may not have been created yet...
+            psf = self.read_psf_model(0., 0., pixPsf=True)
+        except:
+            import traceback
+            traceback.print_exc()
+            pass
+        if psf is None:
+            print("HACK - no FWHM readily available")
+            return np.nan
+        fwhm = psf.fwhm
+        return fwhm
+
     def get_radec_bore(self, primhdr):
         # miracle of miracles, they just put in decimal degrees
         return primhdr['RA'], primhdr['DEC']

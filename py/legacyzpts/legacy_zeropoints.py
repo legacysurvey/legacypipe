@@ -34,7 +34,7 @@ def debug(*args):
 
 
 CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam',
-         'lsstcomcam']
+         'lsstcomcam', 'comcam']
 
 def ptime(text,t0):
     tnow=Time()
@@ -73,7 +73,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('plver', 'S8'),
         ('procdate', 'S19'),
         ('plprocid', 'S7'),
-        ('ccdname', 'S4'),
+        ('ccdname', 'S7'),
         ('ccdnum', 'i2'),
         ('expid', 'S17'),
         ('object', 'S35'),

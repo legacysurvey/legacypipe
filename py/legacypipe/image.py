@@ -1407,11 +1407,10 @@ class LegacySurveyImage(object):
         from tractor import PsfExModel
         tryfns = [self.survey.find_file('psf', img=self),
                   self.survey.find_file('psf-single', img=self)] + self.old_merged_psffns
+        tryfns = [fn for fn in tryfns if fn is not None]
         Ti = None
         header = None
         for fn in tryfns:
-            if fn is None:
-                continue
             if not os.path.exists(fn):
                 continue
             T = fits_table(fn)
