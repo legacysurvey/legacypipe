@@ -66,7 +66,7 @@ def _ccds_table(camera='decam', overrides=None):
 
     cols = [
         ('err_message', 'S30'),
-        ('image_filename', 'S120'),
+        ('image_filename', 'S150'),
         ('image_hdu', 'i2'),
         ('camera', 'S9'),
         ('expnum', 'i8'),
@@ -307,9 +307,12 @@ def measure_image(img_fn, mp, image_dir='images',
             run_sky = False
     if psfex:
         fn = survey.find_file('psf', img=img)
+        fn2 = survey.find_file('psf-single', img=img)
         if (fn is None or
             validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
-            psfex = False
+            if (fn2 is None or
+                validate_version(fn2, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
+                psfex = False
 
     if run_sky or psfex:
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
@@ -332,9 +335,10 @@ def measure_image(img_fn, mp, image_dir='images',
         if psfex:
             psfoutfn = survey.find_file('psf', img=img, use_cache=False)
             ccds = None
-            err_psfex = merge_psfex(survey, img.expnum, ccds, psfoutfn, opts, imgs=imgs)
-            if err_psfex != 1:
-                print('Problem writing {}'.format(psfoutfn))
+            if psfoutfn is not None:
+                err_psfex = merge_psfex(survey, img.expnum, ccds, psfoutfn, opts, imgs=imgs)
+                if err_psfex != 1:
+                    print('Problem writing {}'.format(psfoutfn))
 
     # Now, if they're still missing it's because the entire exposure is borked
     # (WCS failed, weight maps are all zero, etc.), so exit gracefully.
@@ -355,23 +359,29 @@ def measure_image(img_fn, mp, image_dir='images',
                 os.remove(fn)
     if psfex:
         psffn = survey.find_file('psf', img=img)
-        if not os.path.exists(psffn):
-            print('Merged psfex file not found {}'.format(psffn))
-            return []
-        if not validate_version(psffn, 'table', img.expnum, img.plver, img.plprocid):
-            raise RuntimeError('Merged psfex file did not validate!')
-        # At this point the merged file exists and has been validated, so remove
-        # the individual PSFEx and SE files.
-        for img in imgs:
-            fn = survey.find_file('psf-single', img=img, use_cache=False)
-            if fn == psffn:
-                continue
-            if os.path.isfile(fn):
-                os.remove(fn)
-            sefn = img.sefn
-            if os.path.isfile(sefn):
-                os.remove(sefn)
-
+        if psffn is not None:
+            if not os.path.exists(psffn):
+                print('Merged psfex file not found {}'.format(psffn))
+                return []
+            if not validate_version(psffn, 'table', img.expnum, img.plver, img.plprocid):
+                raise RuntimeError('Merged psfex file did not validate!')
+            # At this point the merged file exists and has been validated, so remove
+            # the individual PSFEx and SE files.
+            for img in imgs:
+                fn = survey.find_file('psf-single', img=img, use_cache=False)
+                if fn == psffn:
+                    continue
+                if os.path.isfile(fn):
+                    os.remove(fn)
+                sefn = img.sefn
+                if os.path.isfile(sefn):
+                    os.remove(sefn)
+        else:
+            psffn = survey.find_file('psf-single', img=img)
+            if not os.path.exists(psffn):
+                print('Single psfex file not found {}'.format(psffn))
+                return []
+                    
     # FIXME -- remove temporary individual files directory
 
     if prime_cache:

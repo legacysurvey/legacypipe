@@ -44,18 +44,24 @@ class LsstImage(HscImage):
         calibdir = self.survey.get_calib_dir()
         imgdir = os.path.dirname(self.image_filename)
         basename = self.get_base_name()
-        if len(self.ccdname):
-            calname = basename + '-' + self.ccdname
-        else:
-            calname = basename
-        self.name = calname
+        # if len(self.ccdname):
+        #     calname = basename + '-' + self.ccdname
+        # else:
+        #     calname = basename
+        # self.name = calname
+        self.name = basename
         #self.sefn         = os.path.join(calibdir, 'se',           imgdir, basename, calname + '-se.fits')
         #self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, basename, calname + '-psfex.fits')
         #self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-splinesky.fits')
-        self.sefn         = os.path.join(calibdir, 'se',           imgdir, calname + '-se.fits')
-        self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, calname + '-psfex.fits')
+        #self.sefn         = os.path.join(calibdir, 'se',           imgdir, calname + '-se.fits')
+        #self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, calname + '-psfex.fits')
+        self.sefn         = os.path.join(calibdir, 'se',           imgdir, basename + '-se.fits')
+        self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, basename + '-psfex.fits')
+        print('ccdname:', self.ccdname, 'psffn:', self.psffn)
         self.skyfn        = None
         self.merged_psffn = None
+        #self.merged_psffn = os.path.join(calibdir, 'psfex', imgdir, basename + '-psfex.fits')
+        #print('Merged PSFFN:', self.merged_psffn)
         self.merged_skyfn = None
         self.old_merged_skyfns = []
         self.old_merged_psffns = []
@@ -78,8 +84,8 @@ class LsstImage(HscImage):
             # PSF model file may not have been created yet...
             psf = self.read_psf_model(0., 0., pixPsf=True)
         except:
-            import traceback
-            traceback.print_exc()
+            #import traceback
+            #traceback.print_exc()
             pass
         if psf is None:
             print("HACK - no FWHM readily available")
