@@ -18,6 +18,11 @@ class LsstImage(HscImage):
             except:
                 pass
 
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        """ps1stars: ps1.median 2D array of median mag for each band"""
+        from legacypipe.ps1cat import ps1_to_lsst_comcam
+        return ps1_to_lsst_comcam(ps1stars, band)
+
     def set_calib_filenames(self):
         # Calib filenames
         calibdir = self.survey.get_calib_dir()

@@ -319,3 +319,25 @@ def ps1_to_hsc(psmags, band):
     )[band]
     colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
     return colorterm
+
+def ps1_to_lsst_comcam(psmags, band):
+    '''
+    psmags: 2-d array (Nstars, Nbands)
+    band: [grz]
+    '''
+    g_index = ps1cat.ps1band['g']
+    i_index = ps1cat.ps1band['i']
+    gmag = psmags[:,g_index]
+    imag = psmags[:,i_index]
+    gi = gmag - imag
+    coeffs = dict(
+        u = [ 0., 0., 0. ],
+        # These are from Dustin's notebook Untitled500.ipynb
+        g = [ -0.05036,  0.05517, -0.00968 ],
+        r = [  0.00607, -0.00549,  0.00045 ],
+        i = [  0.01103,  0.00003, -0.00381 ],
+        z = [  0.00206, -0.00007, -0.00089 ],
+        y = [ 0., 0., 0. ],
+    )[band]
+    colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2
+    return colorterm
