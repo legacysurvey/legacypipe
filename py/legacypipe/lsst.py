@@ -4,11 +4,29 @@ from legacypipe.hsc import HscImage
 from legacypipe.image import LegacySurveyImage
 
 class LsstImage(HscImage):
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.2
+
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0,
                  camera_setup=False, **kwargs):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
         if camera_setup:
             return
+
+        # Nominal zeropoints
+        # nJy...
+        #zpt = 31.4 # or 31.4 - 2.5*log10(30) ~= 27.707
+        zpt = 27.707
+        self.zp0 = dict(
+            u = zpt,
+            g = zpt,
+            r = zpt,
+            i = zpt,
+            z = zpt,
+            y = zpt,
+        )
+
         self.set_calib_filenames()
         # Try grabbing fwhm from PSFEx file, if it exists.
         if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
@@ -34,6 +52,21 @@ class LsstImage(HscImage):
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
         self.old_single_psffn = None
         self.old_single_skyfn = None
+
+    #def has_astrometric_calibration(self, ccd):
+    #    return True
+
+    def get_zeropoint(self, primhdr, hdr):
+        # Have to calibrate!
+        return None
+
+    def get_ha_deg(self, primhdr):
+        ## not sure what units this is in...
+        ## HASTART =     2.10076597268751 / [HH:MM:SS] Telescope hour angle at start
+        return (primhdr['HASTART'] + primhdr['HAEND'])/2.
+
+    def get_mjd(self, primhdr):
+        return primhdr['MJD-BEG']
 
     def get_band(self, primhdr):
         band = primhdr['FILTBAND']

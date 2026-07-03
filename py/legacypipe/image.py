@@ -73,7 +73,6 @@ class LegacySurveyImage(object):
         *get_tractor_image*.
 
         '''
-        print('LegacySurveyImage.__init__')
         super().__init__()
         self.sky_before_psfex = False
         self.survey = survey
@@ -86,7 +85,6 @@ class LegacySurveyImage(object):
             self.band = None
             return
 
-        print('image.py __init__: ccd is', ccd, 'image_fn is', image_fn)
         if ccd is None and image_fn is None:
             raise RuntimeError('Either "ccd" or "image_fn" must be set')
 
@@ -1582,8 +1580,6 @@ class LegacySurveyImage(object):
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.get_psfex_conf()
         with self.survey.get_se_dir() as sedir:
-            print('SEfn:', self.sefn)
-
             cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
             info('run_psfex:', cmd)
             rtn = os.system(cmd)

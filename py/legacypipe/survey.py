@@ -994,6 +994,7 @@ class LegacySurveyData(object):
         from legacypipe.wiro   import WiroImage
         from legacypipe.suprime import SuprimeImage
         from legacypipe.lsst import LsstImage
+        from legacypipe.euclid import NispImage
         from collections import OrderedDict
         from legacypipe.bits import MASKBITS, MASKBITS_DESCRIPTIONS
 
