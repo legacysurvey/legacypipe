@@ -1052,6 +1052,7 @@ class LegacySurveyData(object):
             'lsstcomcam': LsstImage,
             'lsst': LsstImage,
             'comcam': LsstImage,
+            'nisp': NispImage,
             }
 
         self.allbands = allbands
