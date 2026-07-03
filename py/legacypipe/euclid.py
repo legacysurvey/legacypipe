@@ -44,6 +44,12 @@ class EuclidImage(LegacySurveyImage):
     def get_gain(self, primhdr, hdr):
         return hdr['GAIN']
 
+    def validate_version(self, typ, fn, *args, **kwargs):
+        # Skip sky model -- super expects a FITS table
+        #if '_W-CAL-IMAGE-BKG_' in fn:
+        #    return True
+        return os.path.exists(fn)
+
 class PixelizedSky(Sky):
     def __init__(self, img):
         self.img = img
@@ -67,15 +73,23 @@ class NispImage(EuclidImage):
         )
         if camera_setup:
             return
-        # self.set_calib_filenames()
-        # # Try grabbing fwhm from PSFEx file, if it exists.
-        # if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
-        #     try:
-        #         # PSF model file may not have been created yet...
-        #         self.fwhm = self.get_fwhm(None, None)
-        #     except:
-        #         pass
-    
+        self.set_calib_filenames()
+        # Try grabbing fwhm from PSF file, if it exists.
+        if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
+            print('grab FWHM from PSF model...')
+            try:
+                # PSF model file may not have been created yet...
+                self.fwhm = self.get_fwhm(None, None)
+            except:
+                pass
+
+    def get_fwhm(self, primhdr, imghdr):
+        if hasattr(self, 'merged_psffn'):
+            psf = self.read_psf_model(0., 0., pixPsf=True)
+            fwhm = psf.fwhm
+            return fwhm
+        return np.nan
+
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
         self.dqfn = self.imgfn
@@ -91,7 +105,7 @@ class NispImage(EuclidImage):
         for hdu in range(1, len(F)):
             f = F[hdu]
             extname = f.get_extname()
-            print('EXTNAME', extname)
+            #print('EXTNAME', extname)
             extname = extname.strip()
             if extname.endswith('.SCI'):
                 exts.append(extname)
@@ -101,8 +115,10 @@ class NispImage(EuclidImage):
         return hdr['ZPAB']
 
     def set_calib_filenames(self):
-        fn = self.image_filename
+        self.psffn = None
 
+        #fn = self.image_filename
+        fn = self.imgfn
         # NIR/2681/EUC_NIR_W-CAL-IMAGE-BKG_Y-2681-1_20240930T183543.377193Z.fits
         # NIR/2681/EUC_NIR_W-CAL-IMAGE_Y-2681-1_20240930T183522.647051Z.fits
         # NIR/2681/EUC_NIR_W-CAL-PSF-I_Y-2681-1_20240930T183602.216265Z.fits

@@ -73,7 +73,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('plver', 'S8'),
         ('procdate', 'S19'),
         ('plprocid', 'S7'),
-        ('ccdname', 'S7'),
+        ('ccdname', 'S9'),
         ('ccdnum', 'i2'),
         ('expid', 'S17'),
         ('object', 'S35'),
@@ -303,15 +303,15 @@ def measure_image(img_fn, mp, image_dir='images',
     if run_sky:
         fn = survey.find_file('sky', img=img)
         if (fn is None or
-            validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
+            img.validate_version('sky', fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             run_sky = False
     if psfex:
         fn = survey.find_file('psf', img=img)
         fn2 = survey.find_file('psf-single', img=img)
         if (fn is None or
-            validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
+            img.validate_version('psf', fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             if (fn2 is None or
-                validate_version(fn2, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
+                img.validate_version('psf-single', fn2, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
                 psfex = False
 
     if run_sky or psfex:
@@ -828,9 +828,9 @@ def main(args=None):
         else:
             afn = F.annfn
 
-        ann_ok, psf_ok, sky_ok = [(fn is None) or validate_version(
-            fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)
-            for fn in [afn, psffn, skyfn]]
+        ann_ok, psf_ok, sky_ok = [(fn is None) or img.validate_version(
+            typ, fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)
+                                  for typ,fn in [('ann',afn), ('psf',psffn), ('sky',skyfn)]]
 
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
             print('Already finished {}'.format(psffn))
