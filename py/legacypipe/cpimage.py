@@ -21,7 +21,7 @@ class CPImage(LegacySurveyImage):
         '''
         return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
 
-    def validate_version(self, *args, **kwargs):
+    def validate_version(self, typ, *args, **kwargs):
         return validate_version(*args, **kwargs)
 
     # A function that can be called by subclassers to apply a per-amp

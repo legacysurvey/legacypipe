@@ -28,7 +28,16 @@ def debug(*args):
 class EuclidImage(LegacySurveyImage):
     def get_expnum(self, primhdr):
         # ??
-        return primhdr['PTGID']
+        #return primhdr['PTGID']
+
+        # So bizarre, this seems like a SUPER basic thing, and yet
+        obs = primhdr['OBS_ID']
+        dith = primhdr['DITHOBS']
+        filt = primhdr['FILTER']
+        fnum = dict(Y=1, J=2, H=3)[filt]
+        assert(fnum < 10)
+        assert(dith < 1000)
+        return obs*10000 + dith*10 + fnum
 
     # plver...
     #ORIGIN  = 'OU-NIR  '           / Euclid SGS origin
@@ -69,7 +78,9 @@ class NispImage(EuclidImage):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
         # Nominal zeropoints
         self.zp0 = dict(
-            Y = 27.0,
+            Y = 29.77,
+            J = 30.05,
+            H = 29.95,
         )
         if camera_setup:
             return
@@ -82,6 +93,10 @@ class NispImage(EuclidImage):
                 self.fwhm = self.get_fwhm(None, None)
             except:
                 pass
+
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.3
 
     def get_fwhm(self, primhdr, imghdr):
         if hasattr(self, 'merged_psffn'):
@@ -163,7 +178,7 @@ class NispImage(EuclidImage):
             det = hdr['DET_ID']
             det = det.strip()
             ccdname = 'det'+det+'.sci'
-            print('PSF: ccd name "%s" vs "%s"' % (ccdname, self.ccdname))
+            #print('PSF: ccd name "%s" vs "%s"' % (ccdname, self.ccdname))
             if ccdname == self.ccdname.lower():
                 # found it!
                 from astrometry.util.fits import fits_table
@@ -177,7 +192,7 @@ class NispImage(EuclidImage):
         #  psf_coeffs (<class 'numpy.ndarray'>) shape (1, 1, 21) dtype >f4
         #  psf_mask (<class 'numpy.ndarray'>) shape (1, 1, 61, 61) dtype >f4
         row = T[0]
-        print('PSF coeffs:', row.psf_coeffs)
+        #print('PSF coeffs:', row.psf_coeffs)
         n_comp,h,w = row.psf_mask.shape
         assert(n_comp == 1)
         # If degree 0, set polname* to avoid assertion error in tractor
