@@ -679,12 +679,14 @@ class LegacySurveyImage(object):
         get_invvar = invvar
         primhdr = self.read_image_primary_header()
 
-        for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
+        for typ,fn,kw in [('image', self.imgfn, dict(data=primhdr)),
+                          ('weight', self.wtfn, {}),
+                          ('dq', self.dqfn, {})]:
             if fn is None:
                 continue
             debug('PLVER', self.plver, type(self.plver),
                   'PLPROCID', self.plprocid, type(self.plprocid), '; checking', fn)
-            if not self.validate_version(fn, 'primaryheader',
+            if not self.validate_version(typ, fn, 'primaryheader',
                                          self.expnum, self.plver, self.plprocid,
                                          cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
                 raise RuntimeError('Version validation failed for filename %s (PLVER/PLPROCID)' % fn)
