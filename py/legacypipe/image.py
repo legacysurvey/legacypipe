@@ -888,6 +888,8 @@ class LegacySurveyImage(object):
             debug('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
             assert(np.all(np.isfinite(skymod)))
             if pixels:
+                debug('Median image value & quartiles:', np.median(img), np.percentile(img.ravel(), [25,75]))
+                debug('zpscale:', NanoMaggies.zeropointToScale(self.ccdzpt))
                 img -= skymod
             zsky = ConstantSky(0.)
             zsky.version = getattr(sky, 'version', '')
@@ -900,12 +902,35 @@ class LegacySurveyImage(object):
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
         if nanomaggies:
             # Scale images to Nanomaggies
+            debug('Scaling image to nanomaggies by dividing by zpscale = %g' % zpscale)
             img /= zpscale
             invvar = invvar * zpscale**2
             if not subsky:
                 sky.scale(1./zpscale)
             zpscale = 1.
             assert(np.all(np.isfinite(img)))
+
+            debug('sig1:', self.sig1)
+            q1,med,q2 = np.percentile(img.ravel(), [25,50,75])
+            debug('Image pixel quartiles:', q1, med, q2)
+            if plots:
+                plt.clf()
+                plt.subplot(2,1,1)
+                mn,mx = np.percentile(img.ravel(), [5,95])
+                n,b,p = plt.hist(img.ravel(), range=(mn,mx), bins=50)
+                plt.xlabel('(zpscaled) image pixel values')
+                ax = plt.axis()
+                xx = np.linspace(mn,mx,100)
+                sig1gauss = np.exp(-0.5 * (xx / self.sig1)**2)
+                plt.plot(xx, max(n) * sig1gauss / max(sig1gauss), 'r-', label='Gauss (sig1=%4g)' % (self.sig1))
+                plt.axis(ax)
+                plt.legend()
+                plt.subplot(2,1,2)
+                s = (img * np.sqrt(invvar))[invvar > 0]
+                mn,mx = np.percentile(s, [5,95])
+                plt.hist(s, range=(mn,mx), bins=50)
+                plt.xlabel('image pixel values * sqrt(invvar) (sigmas)')
+                ps.savefig()
 
         if constant_invvar:
             assert(nanomaggies)

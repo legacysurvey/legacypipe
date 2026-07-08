@@ -237,6 +237,7 @@ def halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps):
         ps.savefig()
 
 def tim_plots(tims, bands, ps):
+    plt.subplots_adjust(bottom=0.2)
     # Pixel histograms of subimages.
     for b in bands:
         plt.clf()

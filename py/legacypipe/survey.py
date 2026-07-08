@@ -499,6 +499,8 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    # # Euclid (along with Y above)
                    # J =    (1, 2.2 * rgb_stretch_factor),
                    # H =    (0, 2.2 * rgb_stretch_factor),
+                   # Euclid VIS
+                   V = (1, 3.4 * rgb_stretch_factor),
                    # ODIN
                    N419 = (2, 6.0 * rgb_stretch_factor),
                    N501 = (2, 6.0 * rgb_stretch_factor),

@@ -2,6 +2,7 @@ import os
 from glob import glob
 import numpy as np
 import fitsio
+import functools
 
 from tractor import PixelizedPsfEx, PixelizedPSF, NormalizedPsf, NormalizedPixelizedPsf
 from tractor.ducks import Sky
@@ -24,6 +25,10 @@ def info(*args):
 def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
+
+@functools.lru_cache
+def fitsio_cached(fn):
+    return fitsio.FITS(fn)
 
 class EuclidImage(LegacySurveyImage):
     def get_expnum(self, primhdr):
@@ -72,25 +77,30 @@ class EuclidImage(LegacySurveyImage):
                 exts.append(extname)
         return exts
 
-    def read_invvar(self, **kwargs):
-        rms = super().read_invvar(**kwargs)
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slc=None,
+                    **kwargs):
+        debug('Reading weight map image', self.wtfn, 'ext', self.wt_hdu)
+        rms = self._read_fits(self.wtfn, self.wt_hdu, slc=slc, **kwargs)
         # RMS to IV
         with np.errstate(divide='ignore'):
             iv = 1./(rms**2)
         iv[~np.isfinite(rms)] = 0.
         iv[rms == 0.] = 0.
-        print('NISP read_invvar: min %g, max %g, # finite: %i, # inf: %i, # zero: %i' %
+        if dq is not None:
+            iv[dq != 0] = 0.
+        debug('Euclid read_invvar: min %g, max %g, # finite: %i, # inf: %i, # zero: %i.  median (conv. to sigmas): %.4g, vs sig1: %.4g' %
               (iv.min(), iv.max(), np.sum(np.isfinite(iv)), np.sum(np.logical_not(np.isfinite(iv))),
-               np.sum(iv == 0)))
+               np.sum(iv == 0), 1./np.sqrt(np.median(iv[iv > 0])), self.sig1))
         return iv
 
     def read_sky_model(self, slc=None, old_calibs_ok=False,
                        template_meta=None, **kwargs):
         print('Reading sky model:', self.merged_skyfn, self.skyextname)
+        F = fitsio_cached(self.merged_skyfn)
         if slc is not None:
-            img = fitsio.FITS(self.merged_skyfn)[self.skyextname][slc]
+            img = F[self.skyextname][slc]
         else:
-            img = fitsio.read(self.merged_skyfn, ext=self.skyextname)
+            img = F[self.skyextname].read()
         print('Sky: median', np.median(img))
         return PixelizedSky(img)
 
@@ -105,13 +115,20 @@ class VisImage(EuclidImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0,
                  camera_setup=False, **kwargs):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
+        #
+        # Which Data Quality bits mark saturation?
+        self.dq_saturation_bits = 0x8
         # Nominal zeropoints
         self.zp0 = dict(
             V = 24.566,
         )
+        self.k_ext = dict(
+            # HACK - just = decam r
+            V = 0.090,
+        )
         if camera_setup:
             return
-        self.set_calib_filenames()
+        #self.set_calib_filenames()
         # Try grabbing fwhm from PSF file, if it exists.
         # if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
         #     print('grab FWHM from PSF model...')
@@ -121,11 +138,14 @@ class VisImage(EuclidImage):
         #     except:
         #         pass
         self.skyextname = self.ccdname.replace('.SCI','')
-        print('CCDname', self.ccdname, 'sky ext', self.skyextname)
 
     @classmethod
     def get_nominal_pixscale(cls):
         return 0.3
+
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
 
     def get_fwhm(self, primhdr, imghdr):
         # shrug
@@ -147,9 +167,18 @@ class VisImage(EuclidImage):
 
     def get_zeropoint(self, primhdr, hdr):
         s = hdr['MAGZEROP']
-        # wtf
+        # wtf it's a string
         # MAGZEROP= '24.56605'           / zero-point
         return float(s)
+
+    # only needed if we want to re-zeropoint (eg, to get debugging plots / confirm the header vals)
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        """ps1stars: ps1.median 2D array of median mag for each band"""
+        # HACK
+        from legacypipe.ps1cat import ps1_to_decam
+        return ps1_to_decam(ps1stars, 'r')
+    def get_ps1_band(self):
+        return 1 # r
 
     def set_calib_filenames(self):
         '''
@@ -171,8 +200,10 @@ class VisImage(EuclidImage):
 
         self.name = '_'.join([parts[0], parts[1], expid])
 
-        # PSF
-        pat = os.path.join(dirnm, '_'.join(parts[:2] + ['GRD-PSF-000-000000-0000000', '*.fits']))
+        # PSF -- I made a copy of the EUC_VIS_GRD-PSF-000... file to the top-level q1/VIS/ directory.
+        # Use that, because it is missing from some exposures (eg, 2719)
+        visdir = os.path.dirname(dirnm)
+        pat = os.path.join(visdir, '_'.join(parts[:2] + ['GRD-PSF-000-000000-0000000', '*.fits']))
         fns = glob(pat)
         if len(fns) == 1:
             self.merged_psffn = fns[0]
@@ -198,13 +229,18 @@ class VisImage(EuclidImage):
                        psf_sigma=1., w=0, h=0):
         print('Reading PSF model:', self.merged_psffn, 'CCDNAME', self.ccdname)
         ext = self.ccdname.replace('.SCI','')
-        img = fitsio.read(self.merged_psffn, ext)
+        img = fitsio_cached(self.merged_psffn)[ext].read()
 
         '''
         FIXME -- this is not at all correct -- the PSF model images are 189x189 but it's actually something like a 9x9 grid of 21x21-pixel images???
         '''
 
         print('Got PSF image', img.shape)
+
+        ## HACK -- cut out just the central PSF image.
+        img = img[4*21:5*21, 4*21:5*21]
+        print('Central PSF:', img.shape)
+
         if normalizePsf:
             debug('Normalizing PSF')
             psf = NormalizedPixelizedPsf(img)
@@ -223,6 +259,10 @@ class VisImage(EuclidImage):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
+        # Only mask documentation I can find is this:
+        # https://euclid.esac.esa.int/dr/q1/dpdd/_downloads/853cef7b4793c838c2ade9538bd55392/VIS_Flags.pdf
+        # 0x40000 - STARSIGNAL
+        # 0x1000000 - OBJECT
         ignore_mask = 0x1040000
         print('Ignoring DQ mask: 0x%x' % ignore_mask)
         ignore_mask = np.uint32(ignore_mask)

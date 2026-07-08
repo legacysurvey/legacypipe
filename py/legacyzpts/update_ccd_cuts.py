@@ -358,6 +358,7 @@ def good_ccd_fraction(survey, ccds):
                'suprimecam': 10,
                'comcam': 9, ### ???,
                'nisp': 16,
+               'vis': 144,
     }
 
     nccds = nccdmap[survey]
