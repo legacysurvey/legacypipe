@@ -1281,7 +1281,9 @@ class LegacySurveyData(object):
 
         elif filetype == 'annotated-ccds':
             return swaplist(
-                glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
+                glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')) +
+                glob(os.path.join(basedir, 'ccds-annotated-*.fits'))
+                )
 
         elif filetype == 'psf':
             return swap(img.merged_psffn)
@@ -1833,6 +1835,9 @@ class LegacySurveyData(object):
         fits_table of CCDs.
         '''
         return ccds
+
+    def filter_tims(self, tims, ccds, targetwcs):
+        return tims, ccds
 
     def filter_annotated_ccds_files(self, fns):
         '''
