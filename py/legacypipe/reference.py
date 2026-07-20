@@ -103,9 +103,9 @@ def get_reference_sources(survey, targetwcs, bands,
                 #
                 debug('Merging SGA and Gaia entries...')
 
-                # FIXME - I just hard-coded Gaia DR3 for simplicity
-                Igal = np.flatnonzero(galaxies.ref_cat == 'G3')
-                assert(np.all(gaia.ref_cat == 'G3'))
+                # Look for G* = Gaia objects in the SGA, match with real Gaia cat
+                Igal = np.flatnonzero([r.startswith('G') for r in galaxies.ref_cat])
+                assert(np.all([r.startswith('G') for r in gaia]))
                 if len(Igal):
                     sga_cols = galaxies.get_columns()
                     gaia_cols = gaia.get_columns()
