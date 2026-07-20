@@ -105,7 +105,7 @@ def get_reference_sources(survey, targetwcs, bands,
 
                 # Look for G* = Gaia objects in the SGA, match with real Gaia cat
                 Igal = np.flatnonzero([r.startswith('G') for r in galaxies.ref_cat])
-                assert(np.all([r.startswith('G') for r in gaia]))
+                assert(np.all([r.startswith('G') for r in gaia.ref_cat]))
                 if len(Igal):
                     sga_cols = galaxies.get_columns()
                     gaia_cols = gaia.get_columns()
