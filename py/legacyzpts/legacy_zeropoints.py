@@ -34,7 +34,7 @@ def debug(*args):
 
 
 CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam',
-         'lsstcomcam', 'comcam', 'nisp', 'vis']
+         'lsstcomcam', 'comcam', 'nisp', 'vis', 'quicklook']
 
 def ptime(text,t0):
     tnow=Time()
@@ -78,7 +78,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('expid', 'S17'),
         ('object', 'S35'),
         ('propid', 'S12'),
-        ('filter', 'S4'),
+        ('filter', 'S5'),
         ('exptime', 'f4'),
         ('mjd_obs', 'f8'),
         ('airmass', 'f4'),

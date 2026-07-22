@@ -526,6 +526,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    NB_E = (0, 6. * rgb_stretch_factor),
                    # CFHT
                    CaHK = (2, 6.0 * rgb_stretch_factor),
+                   M4376 = (2, 6.0 * rgb_stretch_factor),
                    )
     # SUPRIME
     rgbscales.update({
@@ -1007,6 +1008,7 @@ class LegacySurveyData(object):
         from legacypipe.ptf    import PtfImage
         #from legacypipe.cfht   import MegaPrimeImage
         from legacypipe.cfht   import MegaPrimeElixirImage
+        from legacypipe.cfht   import MegaPrimeQuicklookImage
         from legacypipe.hsc    import HscImage
         from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
@@ -1063,6 +1065,7 @@ class LegacySurveyData(object):
             'ptf'    : PtfImage,
             #'megaprime': MegaPrimeImage,
             'megaprime': MegaPrimeElixirImage,
+            'quicklook': MegaPrimeQuicklookImage,
             'hsc'    : HscImage,
             'panstarrs' : PanStarrsImage,
             'wiro'   : WiroImage,

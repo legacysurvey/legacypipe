@@ -519,6 +519,17 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg, **kw)
 
+    elif camera == 'quicklook':
+        mb2zp = 24.36
+        radec_rms = 1.0
+        skybright = {}
+        zpt_diff_avg = 0.1
+        dm = 0.1
+        zpt_lo = dict(M4376=mb2zp-dm)
+        zpt_hi = dict(M4376=mb2zp+dm)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, **kw)
+
     else:
         assert(False)
 

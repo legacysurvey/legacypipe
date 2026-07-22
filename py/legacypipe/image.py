@@ -1354,7 +1354,7 @@ class LegacySurveyImage(object):
             if len(I) != 1:
                 continue
             if not self.validate_version(
-                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    'sky', fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
@@ -1447,7 +1447,7 @@ class LegacySurveyImage(object):
             if len(I) != 1:
                 continue
             if not self.validate_version(
-                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    'psf', fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]

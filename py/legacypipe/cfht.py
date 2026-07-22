@@ -100,7 +100,8 @@ class MegaPrimeImage(LegacySurveyImage):
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
                           # Totally made up
                           u = 0.24,
-                          CaHK = 0.24)
+                          CaHK = 0.24,
+                          )
         #                   #i, Y totally made up
         #                   i=0.08, Y=0.06)
         # --> e/sec
@@ -182,11 +183,14 @@ class MegaPrimeImage(LegacySurveyImage):
 
     def read_image_header(self, **kwargs):
         hdr = super().read_image_header(**kwargs)
+        self.fix_image_header(hdr)
+        return hdr
+
+    def fix_image_header(self, hdr):
         ##### UGH they contain duplicate EXTNAME header cards.
         hdr['EXTNAME'] = 'ccd%02i' % (self.hdu - 1)
         print('Reset EXTNAME to', hdr['EXTNAME'])
-        return hdr
-
+        
     def get_radec_bore(self, primhdr):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
@@ -199,7 +203,7 @@ class MegaPrimeImage(LegacySurveyImage):
         ps1band_map = ps1cat.ps1band
         if name == 'ps1':
             # u->g, CaHK->g
-            ps1band = dict(u='g', CaHK='g').get(self.band, self.band)
+            ps1band = dict(u='g', CaHK='g', M4376='g').get(self.band, self.band)
             ps1band_index = ps1band_map[ps1band]
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
             colorterm = self.clip_colorterm(colorterm)
@@ -594,6 +598,8 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                                            calname + '.wcs')
         self.lacosmic_fn = os.path.join(calibdir, 'lacosmic', imgdir, basename,
                                         calname + '-cr.fits')
+
+        
         #if not os.path.exists(self.scamp_fn):
         #    print('Warning: Scamp header', self.scamp_fn, 'does not exist, using default WCS')
 
@@ -702,7 +708,9 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         threshold = 6.
         neighbor_threshold = 1.
         print('run_lacosmic: running lacosmic')
-        _,crmask = lacosmic.lacosmic(img, contrast, threshold, neighbor_threshold,
+        #_,crmask = lacosmic.lacosmic(img, contrast, threshold, neighbor_threshold,
+        #                             error=err, mask=mask)
+        _,crmask = lacosmic.remove_cosmics(img, contrast, threshold, neighbor_threshold,
                                      error=err, mask=mask)
         print('run_lacosmic: masked', np.sum(crmask), 'pixels')
         tmpfn = self.lacosmic_fn.replace('-cr.fits', '-cr-temp.fits')
@@ -842,3 +850,40 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         xbreak = W//2
         skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
         return skyobj
+
+class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.zp0.update(
+            M4376=24.36,
+            )
+        self.k_ext.update(
+            # made up; = g
+            M4376=0.17,
+            )
+        self.do_solve_field = True
+        self.do_lacosmic = True
+
+    def get_extension_list(self, debug=False):
+        return [0]
+    def compute_filenames(self):
+        self.dqfn = None
+        self.wtfn = None
+    def get_camera(self, primhdr):
+        return 'quicklook'
+
+    def set_calib_filenames(self):
+        super().set_calib_filenames()
+        print('Calib filenames: sky', self.skyfn)
+        
+    def validate_version(self, typ, fn, *args, **kwargs):
+        return os.path.exists(fn)
+
+    def fix_image_header(self, hdr):
+        # these files have fine EXTNAME cards; no-op
+        pass
+
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacypipe.ps1cat import ps1_to_cfht
+        return ps1_to_cfht(ps1stars, band)
+    
