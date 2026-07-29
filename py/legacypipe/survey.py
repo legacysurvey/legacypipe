@@ -496,6 +496,11 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    i =    (0, 3.0 * rgb_stretch_factor),
                    z =    (0, 2.2 * rgb_stretch_factor),
                    Y =    (0, 2.2 * rgb_stretch_factor),
+                   # # Euclid (along with Y above)
+                   # J =    (1, 2.2 * rgb_stretch_factor),
+                   # H =    (0, 2.2 * rgb_stretch_factor),
+                   # Euclid VIS
+                   V = (1, 3.4 * rgb_stretch_factor),
                    # ODIN
                    N419 = (2, 6.0 * rgb_stretch_factor),
                    N501 = (2, 6.0 * rgb_stretch_factor),
@@ -521,6 +526,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    NB_E = (0, 6. * rgb_stretch_factor),
                    # CFHT
                    CaHK = (2, 6.0 * rgb_stretch_factor),
+                   M4376 = (2, 6.0 * rgb_stretch_factor),
                    )
     # SUPRIME
     rgbscales.update({
@@ -531,6 +537,16 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
         'I-A-L527': (0, 6. * rgb_stretch_factor),
     })
 
+    # Euclid
+    if bands == ['Y','J','H']:
+        # Euclid - update YJH -> BRG band mapping
+        rgbscales.update(
+            Y =    (2, 3.0 * rgb_stretch_factor),
+            # Euclid (along with Y above)
+            J =    (1, 2.6 * rgb_stretch_factor),
+            H =    (0, 2.2 * rgb_stretch_factor),
+        )
+    
     if scales is not None:
         rgbscales.update(scales)
 
@@ -571,6 +587,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 rgb[:,:,1] += gf*v
             if bf != 0.:
                 rgb[:,:,2] += bf*v
+        return rgb
 
     elif bands == ['I-A-L427','I-A-L464','I-A-L484','I-A-L505','I-A-L527']:
         print('sdss_rgb: Suprime IA color scheme')
@@ -598,6 +615,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 rgb[:,:,1] += gf*v
             if bf != 0.:
                 rgb[:,:,2] += bf*v
+        return rgb
 
     elif bands == ['M411', 'M464']:
         print('sdss_rgb: IBIS MB1/MB3 color scheme')
@@ -622,6 +640,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 rgb[:,:,1] += gf*v
             if bf != 0.:
                 rgb[:,:,2] += bf*v
+        return rgb
 
     elif bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
         print('sdss_rgb: IBIS 5-band color scheme')
@@ -649,18 +668,18 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 rgb[:,:,1] += gf*v
             if bf != 0.:
                 rgb[:,:,2] += bf*v
+        return rgb
 
-    else:
-        for img,band in zip(imgs, bands):
-            plane,scale = rgbscales[band]
-            if mnmx is None:
-                imgplane = (img * scale + m) * I
-            else:
-                mn,mx = mnmx
-                imgplane = ((img * scale + m) - mn) / (mx - mn)
-            if clip:
-                imgplane = np.clip(imgplane, 0, 1)
-            rgb[:,:,plane] = imgplane
+    for img,band in zip(imgs, bands):
+        plane,scale = rgbscales[band]
+        if mnmx is None:
+            imgplane = (img * scale + m) * I
+        else:
+            mn,mx = mnmx
+            imgplane = ((img * scale + m) - mn) / (mx - mn)
+        if clip:
+            imgplane = np.clip(imgplane, 0, 1)
+        rgb[:,:,plane] = imgplane
     return rgb
 
 def narrowband_rgb(imgs, bands, allbands, scales=None, m=0.03, Q=20, mnmx=None):
@@ -989,11 +1008,13 @@ class LegacySurveyData(object):
         from legacypipe.ptf    import PtfImage
         #from legacypipe.cfht   import MegaPrimeImage
         from legacypipe.cfht   import MegaPrimeElixirImage
+        from legacypipe.cfht   import MegaPrimeQuicklookImage
         from legacypipe.hsc    import HscImage
         from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
         from legacypipe.suprime import SuprimeImage
         from legacypipe.lsst import LsstImage
+        from legacypipe.euclid import NispImage, VisImage
         from collections import OrderedDict
         from legacypipe.bits import MASKBITS, MASKBITS_DESCRIPTIONS
 
@@ -1044,6 +1065,7 @@ class LegacySurveyData(object):
             'ptf'    : PtfImage,
             #'megaprime': MegaPrimeImage,
             'megaprime': MegaPrimeElixirImage,
+            'quicklook': MegaPrimeQuicklookImage,
             'hsc'    : HscImage,
             'panstarrs' : PanStarrsImage,
             'wiro'   : WiroImage,
@@ -1051,6 +1073,8 @@ class LegacySurveyData(object):
             'lsstcomcam': LsstImage,
             'lsst': LsstImage,
             'comcam': LsstImage,
+            'nisp': NispImage,
+            'vis': VisImage,
             }
 
         self.allbands = allbands

@@ -485,13 +485,51 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         dg = (-5, +5)
         dr = (-5, +5)
         dz = (-5, +5)
-        radec_rms = 0.2
+        #radec_rms = 0.2
+        # !!!!
+        radec_rms = 4
         skybright = {}
         zpt_diff_avg = 0.1
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg, **kw)
+
+    elif camera == 'nisp':
+        y0 = 30.
+        j0 = 30.
+        h0 = 30.
+        radec_rms = 0.1
+        skybright = {}
+        zpt_diff_avg = 0.1
+        dm = 1.
+        zpt_lo = dict(Y=y0-dm, J=j0-dm, H=j0-dm)
+        zpt_hi = dict(Y=y0+dm, J=j0+dm, H=j0+dm)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, **kw)
+
+    elif camera == 'vis':
+        v0 = 24.566
+        radec_rms = 0.1
+        skybright = {}
+        zpt_diff_avg = 0.1
+        dm = 1.
+        zpt_lo = dict(V=v0-dm)
+        zpt_hi = dict(V=v0+dm)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, **kw)
+
+    elif camera == 'quicklook':
+        mb2zp = 24.36
+        radec_rms = 1.0
+        skybright = {}
+        zpt_diff_avg = 0.1
+        dm = 0.1
+        zpt_lo = dict(M4376=mb2zp-dm)
+        zpt_hi = dict(M4376=mb2zp+dm)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, **kw)
+
     else:
         assert(False)
 

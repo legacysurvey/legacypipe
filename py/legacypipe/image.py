@@ -73,7 +73,6 @@ class LegacySurveyImage(object):
         *get_tractor_image*.
 
         '''
-        print('LegacySurveyImage.__init__')
         super().__init__()
         self.sky_before_psfex = False
         self.survey = survey
@@ -86,7 +85,6 @@ class LegacySurveyImage(object):
             self.band = None
             return
 
-        print('image.py __init__: ccd is', ccd, 'image_fn is', image_fn)
         if ccd is None and image_fn is None:
             raise RuntimeError('Either "ccd" or "image_fn" must be set')
 
@@ -681,12 +679,14 @@ class LegacySurveyImage(object):
         get_invvar = invvar
         primhdr = self.read_image_primary_header()
 
-        for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
+        for typ,fn,kw in [('image', self.imgfn, dict(data=primhdr)),
+                          ('weight', self.wtfn, {}),
+                          ('dq', self.dqfn, {})]:
             if fn is None:
                 continue
             debug('PLVER', self.plver, type(self.plver),
                   'PLPROCID', self.plprocid, type(self.plprocid), '; checking', fn)
-            if not self.validate_version(fn, 'primaryheader',
+            if not self.validate_version(typ, fn, 'primaryheader',
                                          self.expnum, self.plver, self.plprocid,
                                          cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
                 raise RuntimeError('Version validation failed for filename %s (PLVER/PLPROCID)' % fn)
@@ -888,6 +888,8 @@ class LegacySurveyImage(object):
             debug('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
             assert(np.all(np.isfinite(skymod)))
             if pixels:
+                debug('Median image value & quartiles:', np.median(img), np.percentile(img.ravel(), [25,75]))
+                debug('zpscale:', NanoMaggies.zeropointToScale(self.ccdzpt))
                 img -= skymod
             zsky = ConstantSky(0.)
             zsky.version = getattr(sky, 'version', '')
@@ -900,12 +902,35 @@ class LegacySurveyImage(object):
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
         if nanomaggies:
             # Scale images to Nanomaggies
+            debug('Scaling image to nanomaggies by dividing by zpscale = %g' % zpscale)
             img /= zpscale
             invvar = invvar * zpscale**2
             if not subsky:
                 sky.scale(1./zpscale)
             zpscale = 1.
             assert(np.all(np.isfinite(img)))
+
+            debug('sig1:', self.sig1)
+            q1,med,q2 = np.percentile(img.ravel(), [25,50,75])
+            debug('Image pixel quartiles:', q1, med, q2)
+            if plots:
+                plt.clf()
+                plt.subplot(2,1,1)
+                mn,mx = np.percentile(img.ravel(), [5,95])
+                n,b,p = plt.hist(img.ravel(), range=(mn,mx), bins=50)
+                plt.xlabel('(zpscaled) image pixel values')
+                ax = plt.axis()
+                xx = np.linspace(mn,mx,100)
+                sig1gauss = np.exp(-0.5 * (xx / self.sig1)**2)
+                plt.plot(xx, max(n) * sig1gauss / max(sig1gauss), 'r-', label='Gauss (sig1=%4g)' % (self.sig1))
+                plt.axis(ax)
+                plt.legend()
+                plt.subplot(2,1,2)
+                s = (img * np.sqrt(invvar))[invvar > 0]
+                mn,mx = np.percentile(s, [5,95])
+                plt.hist(s, range=(mn,mx), bins=50)
+                plt.xlabel('image pixel values * sqrt(invvar) (sigmas)')
+                ps.savefig()
 
         if constant_invvar:
             assert(nanomaggies)
@@ -1329,7 +1354,7 @@ class LegacySurveyImage(object):
             if len(I) != 1:
                 continue
             if not self.validate_version(
-                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    'sky', fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
@@ -1422,7 +1447,7 @@ class LegacySurveyImage(object):
             if len(I) != 1:
                 continue
             if not self.validate_version(
-                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    'psf', fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
@@ -1582,8 +1607,6 @@ class LegacySurveyImage(object):
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.get_psfex_conf()
         with self.survey.get_se_dir() as sedir:
-            print('SEfn:', self.sefn)
-
             cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
             info('run_psfex:', cmd)
             rtn = os.system(cmd)

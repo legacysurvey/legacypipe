@@ -223,6 +223,8 @@ def ps1_to_decam(psmags, band):
         N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
         # CFHT
         CaHK = [0., 2.3],
+        # copied from IBIS M438
+        M4376 = [ 0.0698, -0.1430, 3.0168, -4.3361, 1.9309],
         # IBIS -- from Arjun 2024-12-04
         # g-r
         M411 = [ 0.2226, -0.7799, 4.5390, -4.1288, 1.3112],
@@ -238,7 +240,40 @@ def ps1_to_decam(psmags, band):
 
     # Most are with respect to g-i, some are g-r...
     color = gi
-    if band in ['CaHK', 'M411', 'M438', 'M464', 'M490', 'M517']:
+    if band in ['CaHK', 'M411', 'M438', 'M464', 'M490', 'M517', 'M4376']:
+        color = gr
+
+    colorterm = np.zeros(len(color))
+    for power,coeff in enumerate(coeffs):
+        colorterm += coeff * color**power
+    return colorterm
+
+def ps1_to_cfht(psmags, band):
+    '''
+    psmags: 2-d array (Nstars, Nbands)
+    band: [grz]
+    '''
+    g_index = ps1cat.ps1band['g']
+    r_index = ps1cat.ps1band['r']
+    i_index = ps1cat.ps1band['i']
+    gmag = psmags[:,g_index]
+    rmag = psmags[:,r_index]
+    imag = psmags[:,i_index]
+    gi = gmag - imag
+    gr = gmag - rmag
+
+    coeffs = dict(
+        # CFHT
+        CaHK = [0., 2.3],
+        # copied from IBIS M438
+        #M4376 = [ 0.0698, -0.1430, 3.0168, -4.3361, 1.9309],
+        # Dustin Untitled506.ipynb
+        M4376 = [-0.67363784,  1.74593002, -1.50902989,  0.60273151],
+        )[band]
+
+    # Default to g-i, some are g-r...
+    color = gi
+    if band in ['CaHK', 'M4376']:
         color = gr
 
     colorterm = np.zeros(len(color))
