@@ -317,6 +317,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         from legacypipe.runbrick_plots import tim_plots
         tim_plots(tims, bands, ps)
 
+    # Give the survey object a chance to cut/modify the ccds/ims/tims.
+    tims,ccds = survey.filter_tims(tims, ccds, targetwcs)
+
     # Add header cards about the survey-ccds files that were used.
     fns = survey.find_file('ccd-kds')
     fns = survey.filter_ccd_kd_files(fns)
