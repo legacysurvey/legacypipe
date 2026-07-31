@@ -308,11 +308,15 @@ def measure_image(img_fn, mp, image_dir='images',
     if psfex:
         fn = survey.find_file('psf', img=img)
         fn2 = survey.find_file('psf-single', img=img)
-        if (fn is None or
+        if (fn is not None and
             img.validate_version('psf', fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
-            if (fn2 is None or
-                img.validate_version('psf-single', fn2, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
-                psfex = False
+            print('Validated PSF from file', fn)
+            psfex = False
+        if (psfex and (fn2 is not None) and
+            img.validate_version('psf-single', fn2, 'table', img.expnum, img.plver, img.plprocid,
+                                 quiet=quiet)):
+            print('Validated PSF from file', fn2)
+            psfex = False
 
     if run_sky or psfex:
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))

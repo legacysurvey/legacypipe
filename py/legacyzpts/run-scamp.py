@@ -212,6 +212,8 @@ def main():
                         help='Set scamp command to run, default %(default)s')
     parser.add_argument('--force-ccds', default=False, action='store_true',
                         help='Force scamp files to contain the first 36 CCDs of CFHT images')
+    parser.add_argument('--force-ccds-40', default=False, action='store_true',
+                        help='Force scamp files to contain the 40 CCDs of CFHT images')
     args = parser.parse_args()
 
     if args.scamp_dir is None:
@@ -230,6 +232,10 @@ def main():
     if args.force_ccds:
         print('Forcing the Scamp output files to contain 36 CFHT CCDs')
         ccds = ['CCD%02i' % i for i in range(36)]
+        kw.update(force_ccds=ccds)
+    if args.force_ccds_40:
+        print('Forcing the Scamp output files to contain 40 CFHT CCDs')
+        ccds = ['CCD%02i' % i for i in range(40)]
         kw.update(force_ccds=ccds)
 
     scampfiles = write_scamp_catalogs(scamp_dir, args.photom, args.survey_dir,

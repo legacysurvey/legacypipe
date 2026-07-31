@@ -120,6 +120,13 @@ class MegaPrimeImage(LegacySurveyImage):
             except:
                 pass
 
+    def validate_version(self, typ, *args, **kwargs):
+        from legacypipe.cpimage import validate_version
+        #print('Validate_version:', typ, args, kwargs)
+        if typ in ['psf', 'psf-single']:
+            return validate_version(*args, **kwargs)
+        return super().validate_version(typ, *args, **kwargs)
+
     def set_ccdzpt(self, ccdzpt):
         # Adjust zeropoint for exposure time
         self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
@@ -218,13 +225,8 @@ class MegaPrimeImage(LegacySurveyImage):
             band = sdssbands[self.band]
             return cat.psfmag[:, band] + colorterm
         elif name == 'gaia':
-            print('HACKING Gaia color terms for CFHT')
-            cat.about()
-            #g = cat.phot_g_mean_mag
-            bp = cat.phot_bp_mean_mag
-            #rp = cat.phot_rp_mean_mag
-            colorterm = np.zeros(len(cat))
-            return bp + colorterm
+            from legacypipe.gaiacat import gaia_to_cfht
+            return gaia_to_cfht(cat, [self.band])[0]
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 
@@ -399,6 +401,15 @@ class MegaPrimeImage(LegacySurveyImage):
 class MegaPrimeElixirImage(MegaPrimeImage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.zp0.update(
+            M4376=24.36,
+            )
+        self.k_ext.update(
+            # made up; = g
+            M4376=0.17,
+            )
+
         self.scamp_wcs = None
         # Run sky calib first (for patching...)
         self.sky_before_psfex = True
@@ -876,9 +887,6 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         super().set_calib_filenames()
         print('Calib filenames: sky', self.skyfn)
         
-    def validate_version(self, typ, fn, *args, **kwargs):
-        return os.path.exists(fn)
-
     def fix_image_header(self, hdr):
         # these files have fine EXTNAME cards; no-op
         pass

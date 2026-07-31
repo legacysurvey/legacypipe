@@ -242,7 +242,9 @@ class LegacySurveyImage(object):
     def override_ccd_table_types(self):
         return {}
 
-    def validate_version(self, *args, **kwargs):
+    def validate_version(self, typ, fn, *args, **kwargs):
+        if fn is not None:
+            return os.path.exists(fn)
         return True
 
     def compute_filenames(self):
