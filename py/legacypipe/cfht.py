@@ -231,12 +231,8 @@ class MegaPrimeImage(LegacySurveyImage):
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
-        from legacypipe.ps1cat import ps1_to_decam
-        print('HACK -- using DECam color term for CFHT!!')
-        #if band == 'u':
-        #    print('HACK -- using g-band color term for u band!')
-        #    band = 'g'
-        return ps1_to_decam(ps1stars, band)
+        from legacypipe.ps1cat import ps1_to_cfht
+        return ps1_to_cfht(ps1stars, band)
 
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
