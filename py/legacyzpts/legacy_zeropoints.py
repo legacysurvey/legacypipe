@@ -226,6 +226,7 @@ def measure_image(img_fn, mp, image_dir='images',
                   survey=None, psfex=True, camera=None,
                   prime_cache=False,
                   sky_subtract_large_galaxies=True,
+                  do_delete=True,
                   **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
@@ -360,7 +361,10 @@ def measure_image(img_fn, mp, image_dir='images',
             if fn == skyfn:
                 continue
             if os.path.isfile(fn):
-                os.remove(fn)
+                if do_delete:
+                    os.remove(fn)
+                else:
+                    print('Not deleting', fn)
     if psfex:
         psffn = survey.find_file('psf', img=img)
         if psffn is not None:
@@ -376,10 +380,16 @@ def measure_image(img_fn, mp, image_dir='images',
                 if fn == psffn:
                     continue
                 if os.path.isfile(fn):
-                    os.remove(fn)
+                    if do_delete:
+                        os.remove(fn)
+                    else:
+                        print('Not deleting', fn)
                 sefn = img.sefn
                 if os.path.isfile(sefn):
-                    os.remove(sefn)
+                    if do_delete:
+                        os.remove(sefn)
+                    else:
+                        print('Not deleting', fn)
         else:
             psffn = survey.find_file('psf-single', img=img)
             if not os.path.exists(psffn):
@@ -715,13 +725,14 @@ def get_parser():
                         help='For sky calibs: do not subtract large galaxies first')
     parser.add_argument('--no-check-photom', dest='check_photom', action='store_false',
                         help='Do not check for photom file when deciding if this file is done or not.')
+    parser.add_argument('--no-delete', dest='do_delete', default=True, action='store_false',
+                        help='Do not delete Source Extractor catalogs, PsfEx results, etc')
     parser.add_argument('--threads', default=None, type=int,
                         help='Multiprocessing threads (parallel by HDU)')
     parser.add_argument('--quiet', default=False, action='store_true', help='quiet down')
     parser.add_argument('--overhead', type=str, default=None, help='Print python startup time since the given date.')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='More logging')
     return parser
-
 
 def main(args=None):
     import datetime
