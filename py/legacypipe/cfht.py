@@ -399,12 +399,13 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         super().__init__(*args, **kwargs)
 
         self.zp0.update(
-            M4376=24.36,
-            )
+            M4376 = 24.80,
+        )
         self.k_ext.update(
-            # made up; = g
-            M4376=0.17,
-            )
+            # from IBIS - from Arjun 2024-10-29
+            M4112 = 0.333,
+            M4376 = 0.273,
+        )
 
         self.scamp_wcs = None
         # Run sky calib first (for patching...)
@@ -861,13 +862,13 @@ class MegaPrimeElixirImage(MegaPrimeImage):
 class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.zp0.update(
-            M4376=24.36,
-            )
-        self.k_ext.update(
-            # made up; = g
-            M4376=0.17,
-            )
+        # self.zp0.update(
+        #     M4376=24.36,
+        #     )
+        # self.k_ext.update(
+        #     # made up; = g
+        #     M4376=0.17,
+        #     )
         self.do_solve_field = True
         self.do_lacosmic = True
 
