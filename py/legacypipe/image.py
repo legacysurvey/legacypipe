@@ -403,7 +403,7 @@ class LegacySurveyImage(object):
         )
         return MAGLIM.get(self.band, (16.,20.))
 
-    def get_radec_bore(self, primhdr):
+    def get_radec_bore(self, primhdr, hdr):
         from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
         # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
         # In others, RA does not exist (eg CP/V4.8.2a/CP20160824/c4d_160825_062109_ooi_g_ls9.fits.fz)
@@ -497,8 +497,18 @@ class LegacySurveyImage(object):
         return hmsstring2ra(hastr)
 
     def get_pixscale(self, primhdr, hdr):
-        return 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
-                                      hdr['CD1_2'] * hdr['CD2_1']))
+        # According to WCS "Paper 1"
+        # https://www.aanda.org/articles/aa/full/2002/45/aah3859/aah3859.html
+        # If any of the CDx_y cards exist, the rest are assumed 0.; else assume
+        # the PCx_y convention.
+        if ('CD1_1' in hdr) or ('CD1_2' in hdr) or ('CD2_1' in hdr) or ('CD2_2' in hdr):
+            return 3600. * np.sqrt(np.abs(hdr.get('CD1_1', 0.) * hdr.get('CD2_2', 0.) -
+                                          hdr.get('CD1_2', 0.) * hdr.get('CD2_1', 0.)))
+        # Here I'm just taking the geometric mean of the CDELTs, times the sqrt(det(PC)), not
+        # sure this is the best definition.
+        return 3600. * (np.sqrt(np.abs(hdr.get('CDELT1', 1.) * hdr.get('CDELT2', 1.))) *
+                        np.sqrt(np.abs(hdr.get('PC1_1', 0.) * hdr.get('PC2_2', 0.) -
+                                       hdr.get('PC1_2', 0.) * hdr.get('PC2_1', 0.))))
 
     # Used during zeropointing / annotation
     def get_cd_matrix(self, primhdr, hdr):

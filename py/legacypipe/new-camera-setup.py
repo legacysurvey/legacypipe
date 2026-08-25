@@ -170,7 +170,7 @@ def main():
                                   image_fn=opt.image, image_hdu=opt.image_hdu)
 
     # Once legacy_zeropoints.py starts...
-    ra_bore, dec_bore = img.get_radec_bore(primhdr)
+    ra_bore, dec_bore = img.get_radec_bore(primhdr, hdr)
     info('RA,Dec boresight:', ra_bore, dec_bore)
     info('Airmass:', img.get_airmass(primhdr, hdr, ra_bore, dec_bore))
     info('Gain:', img.get_gain(primhdr, hdr))

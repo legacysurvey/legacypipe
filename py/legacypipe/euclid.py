@@ -49,7 +49,7 @@ class EuclidImage(LegacySurveyImage):
     #ORIGIN  = 'OU-NIR  '           / Euclid SGS origin
     #SOFTVERS= '4.2     '
 
-    def get_radec_bore(self, primhdr):
+    def get_radec_bore(self, primhdr, hdr):
         # Good ol' decimal degrees
         return primhdr['RA'], primhdr['DEC']
 

@@ -1013,7 +1013,7 @@ class LegacySurveyData(object):
         from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
         from legacypipe.suprime import SuprimeImage
-        from legacypipe.lsst import LsstImage
+        from legacypipe.lsst import LsstImage, LsstCoaddImage
         from legacypipe.euclid import NispImage, VisImage
         from collections import OrderedDict
         from legacypipe.bits import MASKBITS, MASKBITS_DESCRIPTIONS
@@ -1072,6 +1072,8 @@ class LegacySurveyData(object):
             'suprimecam': SuprimeImage,
             'lsstcomcam': LsstImage,
             'lsst': LsstImage,
+            'lsstcam': LsstImage,
+            'lsstcoadd': LsstCoaddImage,
             'comcam': LsstImage,
             'nisp': NispImage,
             'vis': VisImage,

@@ -28,6 +28,7 @@ class LsstImage(HscImage):
         )
 
         self.set_calib_filenames()
+
         # Try grabbing fwhm from PSFEx file, if it exists.
         if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
             try:
@@ -99,7 +100,7 @@ class LsstImage(HscImage):
         fwhm = psf.fwhm
         return fwhm
 
-    def get_radec_bore(self, primhdr):
+    def get_radec_bore(self, primhdr, hdr):
         # miracle of miracles, they just put in decimal degrees
         return primhdr['RA'], primhdr['DEC']
 
@@ -124,3 +125,221 @@ class LsstImage(HscImage):
     # but that doesn't build at NERSC, so just fall back to PsfEx.
     def read_psf_model(self, *args, **kwargs):
         return LegacySurveyImage.read_psf_model(self, *args, **kwargs)
+
+# DP2 deepCoadd images
+class LsstCoaddImage(LsstImage):
+    def __init__(self, *args, **kwargs):
+        self.psf = None
+        super().__init__(*args, **kwargs)
+
+        # Nominal zeropoints
+        # nJy...
+        zpt = 31.4
+        self.zp0 = dict(
+            u = zpt,
+            g = zpt,
+            r = zpt,
+            i = zpt,
+            z = zpt,
+            y = zpt,
+        )
+    
+    # Like HSC, we're going to use the calibrations built into the deepCoadd files.
+    # hence no external calib filenames.
+    def set_calib_filenames(self):
+        self.sefn = None
+        self.psffn = None
+        basename = self.get_base_name()
+        self.name = basename
+
+    def get_band(self, primhdr):
+        # HIERARCH LSST BUTLER DATAID BAND = 'g      '
+        band = primhdr['LSST BUTLER DATAID BAND']
+        band = band.strip().split()[0]
+        return band
+
+    def get_expnum(self, primhdr):
+        # Tracts are bigger than Patches
+        # 10x10 patches within each Tract
+        # reserve 3 digits just to be safe
+        tract = primhdr['LSST BUTLER DATAID TRACT'] # = 7032
+        patch = primhdr['LSST BUTLER DATAID PATCH'] # = 80
+        return tract * 1000 + patch
+
+    def get_mjd(self, primhdr):
+        from astrometry.util.starutil_numpy import datetomjd
+        d = self.get_date(primhdr)
+        return datetomjd(d)
+
+    def get_date(self, primhdr):
+        from datetime import datetime
+        # HACK - this is just the date the COADD FILE was WRITTEN
+        date = primhdr['DATE']
+        # DATE    = '2026-06-18T13:13:43.519' / UTC date this HDU was written.
+        return datetime.strptime(date[:19], "%Y-%m-%dT%H:%M:%S")
+
+    def get_ha_deg(self, primhdr):
+        # HACK
+        return 0.0
+
+    def get_camera(self, primhdr):
+        # hack
+        return 'lsstcoadd'
+
+    def get_ccdname(self, primhdr, hdr):
+        return ''
+
+    def read_psf_model(self, x0, y0,
+                       gaussPsf=False, pixPsf=False, hybridPsf=False,
+                       normalizePsf=False, old_calibs_ok=False,
+                       psf_sigma=1., w=0, h=0):
+        if gaussPsf:
+            return LegacySurveyImage.read_psf_model(self, x0,y0, gaussPsf=True, psf_sigma=psf_sigma)
+
+        if self.psf is not None:
+            return self.psf
+
+        import tempfile
+        import fitsio
+        # piecewise constant pixelized PSF model
+
+        # ugh, fitsio can't read 4-d compressed images...
+        # but, funpack can handle them, and then fitsio can read an uncompressed 4-d image.
+        F = self.read_image_fits()
+        psf_hdu = -1
+        for i,f in enumerate(F):
+            if f.get_extname() == 'PSF':
+                psf_hdu = i
+                break
+        assert(psf_hdu != -1)
+
+        f,tmppsffn = tempfile.mkstemp(suffix='.fits')
+        os.close(f)
+        os.remove(tmppsffn)
+        cmd = 'funpack -E %i -O %s %s' % (psf_hdu, tmppsffn, self.imgfn)
+        print('Funpack command:', cmd)
+        rtn = os.system(cmd)
+        assert(rtn == 0)
+        psf_cube = fitsio.read(tmppsffn)
+        os.remove(tmppsffn)
+        print('Read PSF cube:', psf_cube.shape)
+        # MAGIC number 150 = LSST deepCoadd cell size, in pixels
+        psf = PiecewiseConstantPixelizedPsf(psf_cube, 150, x0, y0)
+        self.psf = psf
+        return psf
+
+    def get_radec_bore(self, primhdr, hdr):
+        wcs = self.get_wcs(hdr=hdr)
+        return wcs.radec_center()
+
+    def get_airmass(self, primhdr, imghdr, ra, dec):
+        # HACK
+        #return None
+        return 1.
+    
+    def get_cd_matrix(self, primhdr, hdr):
+        # HACK - probably needs a * CDELT[12]?  But those are 1.0 in deepCoadds
+        return hdr['PC1_1'], 0., 0., hdr['PC2_2']
+
+    def get_exptime(self, primhdr):
+        # HACK...
+        return 1.
+
+    def get_gain(self, primhdr, hdr):
+        # HACK
+        return 1.
+
+from tractor.psf import PixelizedPSF
+
+class PiecewiseConstantPixelizedPsf(PixelizedPSF):
+    '''
+    A PSF class for the Rubin/LSST DeepCoadd PSF model, which has a
+    constant PSF in each 150x150-pixel grid cell.
+    '''
+    def __init__(self, img_grid, grid_size, x0=0, y0=0):
+        '''
+        img_grid: (grid_h,grid_w, psf_h,psf_w) data cube
+        grid_size: integer, scalar: size in pixels of the cells where PSFs are defined,
+            eg 150 for Rubin DP2
+        '''
+        # H x W x gridy x gridx
+        assert(len(img_grid.shape) == 4)
+        self.img_grid = img_grid
+        self.grid_size = grid_size
+        self.gh, self.gw, self.ph, self.pw = img_grid.shape
+        self.x0 = x0
+        self.y0 = y0
+
+        # call superclass constructor with the PSF in grid 0,0 to set parameters like .sampling
+        super().__init__(self.img_grid[0, 0, :, :])
+        
+        # compute FWHM from just averaging all the PSF images!
+        avgpsf = np.mean(img_grid, axis=(0,1))
+        print('average psf img:', avgpsf.shape, 'sum', np.sum(avgpsf))
+        fwhm = fit_circular_gaussian(avgpsf)
+        print('Gaussian-fit FWHM:', fwhm)
+        self.fwhm = fwhm
+
+    def __str__(self):
+        return 'PicewiseConstantPixelizedPsf'
+
+    @property
+    def shape(self):
+        return (self.ph, self.pw)
+
+    def copy(self):
+        return self.__class__(self.img_grid.copy(), self.grid_size, x0=self.x0, y0=self.y0)
+
+    def getShifted(self, x0, y0):
+        return self.__class__(self.img_grid.copy(), self.grid_size, x0=self.x0 + x0, y0=self.y0 + y0)
+
+    def constantPsfAt(self, x, y):
+        return PixelizedPSF(self.getImage(x, y))
+
+    def getImage(self, px, py):
+        cell_x = int((px - self.x0) // self.grid_size)
+        cell_y = int((py - self.y0) // self.grid_size)
+        assert(cell_x >= 0)
+        assert(cell_y >= 0)
+        assert(cell_y < self.gh)
+        assert(cell_x < self.gw)
+        return self.img_grid[cell_y, cell_x, :, :]
+
+
+
+# def estimate_fwhm_1d(y):
+#     # Hackily, assume a spline interpolant and return the fit width of the half-max values
+#     from scipy.interpolatio import CubicSpline
+#     from scipy.optimize import minimize_scalar
+#     x = np.arange(len(y))
+#     spl = CubicSpline(x, y)
+# 
+#     # find peak value
+#     deriv = spl.derivative()
+#     sol = deriv.solve()
+#     print('PSF derivative = 0: at', sol)
+    
+def fit_circular_gaussian(psfimg):
+    # Assume centered PSF image in sky-subtracted image.
+    import tractor
+    h,w = psfimg.shape
+    cx,cy = (w-1)/2, (h-1)/2
+    flux = np.sum(psfimg)
+    # sigmas, weights.  sigma=2.5 is fwhm=5.9 pix is 1.2 arcsec in Rubin
+    psf = tractor.NCircularGaussianPSF([2.5], [1.])
+    tim = tractor.Image(data=psfimg, inverr=np.ones_like(psfimg), psf=psf)
+    src = tractor.PointSource(tractor.PixPos(cx, cy), tractor.Flux(flux))
+    tr = tractor.Tractor([tim], [src])
+    # Fit PSF width + Catalog entries
+    tim.freezeAllBut('psf')
+    psf.freezeAllBut('sigmas')
+    optargs = dict(priors=False, shared_params=False)
+    tr.optimize_loop(**optargs)
+    #fwhms[i] = psf.sigmas[0] * 2.35 * pixsc
+    fit_fwhm = psf.sigmas[0] * 2.35
+    return fit_fwhm
+
+    
+
+
+    

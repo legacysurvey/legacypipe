@@ -113,8 +113,7 @@ class PanStarrsImage(LegacySurveyImage):
         #### Really we should read PC001001, PC001002, PC002001, PC002002...
         return -hdr['CDELT1'], 0., 0., hdr['CDELT2']
 
-    def get_radec_bore(self, primhdr):
-        hdr = self.read_image_header()
+    def get_radec_bore(self, primhdr, hdr):
         return hdr['CRVAL1'], hdr['CRVAL2']
 
     def get_band(self, primhdr):

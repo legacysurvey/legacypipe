@@ -59,11 +59,11 @@ class WiroImage(LegacySurveyImage):
         # ASSUME that the filter is one of the above!
         return filtmap[f]
 
-    def get_radec_bore(self, primhdr):
+    def get_radec_bore(self, primhdr, hdr):
         # Some TELDEC header cards (eg 20221030/a276) have a bug:
         # TELDEC  = '-4:-50:-23.-9'
         try:
-            return super.get_radec_bore(primhdr)
+            return super.get_radec_bore(primhdr, hdr)
         except Exception:
             return None,None
 
@@ -255,7 +255,8 @@ class WiroImage(LegacySurveyImage):
             from legacypipe.survey import create_temp
             # Final astrometry -- using solve-field on the "photom" results!
             primhdr = self.read_image_primary_header()
-            r,d = self.get_radec_bore(primhdr)
+            hdr = self.read_image_header()
+            r,d = self.get_radec_bore(primhdr, hdr)
             pixscale = self.get_pixscale(None,None)
             with get_data_file('data', 'an-wiro.cfg') as configfn:
                 args = ['--config', configfn,
@@ -299,7 +300,8 @@ class WiroImage(LegacySurveyImage):
             from legacypipe.utils import get_data_file
             from astrometry.util.file import trymakedirs
             primhdr = self.read_image_primary_header()
-            r,d = self.get_radec_bore(primhdr)
+            hdr = self.read_image_header()
+            r,d = self.get_radec_bore(primhdr, hdr)
             # Initial astrometry -- using solve-field on the image??
             with get_data_file('data', 'an-wiro.cfg') as configfn:
                 args = ['--config', configfn,

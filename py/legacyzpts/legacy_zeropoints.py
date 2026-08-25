@@ -34,7 +34,7 @@ def debug(*args):
 
 
 CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam',
-         'lsstcomcam', 'comcam', 'nisp', 'vis', 'quicklook']
+         'lsstcomcam', 'comcam', 'lsstcam', 'lsstcoadd', 'nisp', 'vis', 'quicklook']
 
 def ptime(text,t0):
     tnow=Time()
@@ -317,6 +317,9 @@ def measure_image(img_fn, mp, image_dir='images',
             img.validate_version('psf-single', fn2, 'table', img.expnum, img.plver, img.plprocid,
                                  quiet=quiet)):
             print('Validated PSF from file', fn2)
+            psfex = False
+        if fn is None and fn2 is None:
+            # an external PSF model isn't being used - eg HSC/LSST built-in models
             psfex = False
 
     if run_sky or psfex:
@@ -931,7 +934,7 @@ def set_ccd_metadata(ccds, img, primhdr, hdr):
             continue
         ccds[key] = val
 
-    ra_bore, dec_bore = img.get_radec_bore(primhdr)
+    ra_bore, dec_bore = img.get_radec_bore(primhdr, hdr)
     ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
     # hdr can be None
     try:
@@ -967,7 +970,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     hdr = imobj.read_image_header(ext=imobj.hdu)
     set_ccd_metadata(ccds, imobj, primhdr, hdr)
     # needed below...
-    ra_bore, dec_bore = imobj.get_radec_bore(primhdr)
+    ra_bore, dec_bore = imobj.get_radec_bore(primhdr, hdr)
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
 
     # Quick check for PsfEx file -- moved before WCS, for CFHT's benefit

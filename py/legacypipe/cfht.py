@@ -198,7 +198,7 @@ class MegaPrimeImage(LegacySurveyImage):
         hdr['EXTNAME'] = 'ccd%02i' % (self.hdu - 1)
         print('Reset EXTNAME to', hdr['EXTNAME'])
         
-    def get_radec_bore(self, primhdr):
+    def get_radec_bore(self, primhdr, hdr):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
     def clip_colorterm(self, c):
@@ -636,7 +636,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         # Initial astrometry -- using solve-field on the image
         primhdr = self.read_image_primary_header()
         hdr = self.read_image_header()
-        r,d = self.get_radec_bore(primhdr)
+        r,d = self.get_radec_bore(primhdr, hdr)
         imgfn = self.imgfn
         ext = self.hdu
         tmpimgfn = None
