@@ -4,7 +4,8 @@ import numpy as np
 import fitsio
 import functools
 
-from tractor import PixelizedPsfEx, PixelizedPSF, NormalizedPsf, NormalizedPixelizedPsf
+from tractor import PixelizedPsfEx, PixelizedPSF
+from tractor.psf import NormalizedPsf, NormalizedPixelizedPsf
 from tractor.ducks import Sky
 
 from legacypipe.image import LegacySurveyImage, NormalizedPixelizedPsfEx
