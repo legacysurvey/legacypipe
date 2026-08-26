@@ -360,6 +360,7 @@ def good_ccd_fraction(survey, ccds):
                'nisp': 16,
                'vis': 144,
                'quicklook': 40,
+               'lsstcoadd': 1,
     }
 
     nccds = nccdmap[survey]

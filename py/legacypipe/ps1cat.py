@@ -70,6 +70,8 @@ class HealpixedCatalog(object):
 
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4,
+                   y=4,
+                   u=0,
                    # ODIN
                    N419=0,
                    N501=0,

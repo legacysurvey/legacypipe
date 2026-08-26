@@ -27,6 +27,8 @@ class LsstImage(HscImage):
             y = zpt,
         )
 
+        self.k_ext.update(u=0.63) # from decam.py
+        
         self.set_calib_filenames()
 
         # Try grabbing fwhm from PSFEx file, if it exists.
@@ -164,7 +166,8 @@ class LsstCoaddImage(LsstImage):
         # reserve 3 digits just to be safe
         tract = primhdr['LSST BUTLER DATAID TRACT'] # = 7032
         patch = primhdr['LSST BUTLER DATAID PATCH'] # = 80
-        return tract * 1000 + patch
+        bandnum = dict(u=0, g=1, r=2, i=3, z=4, y=5)[self.get_band(primhdr)]
+        return 10 * (tract * 1000 + patch) + bandnum
 
     def get_mjd(self, primhdr):
         from astrometry.util.starutil_numpy import datetomjd
@@ -274,7 +277,18 @@ class PiecewiseConstantPixelizedPsf(PixelizedPSF):
         super().__init__(self.img_grid[0, 0, :, :])
         
         # compute FWHM from just averaging all the PSF images!
-        avgpsf = np.mean(img_grid, axis=(0,1))
+        # (the catch: some cells can be all NaNs!!)
+        avgpsf = np.zeros((self.ph, self.pw))
+        ngood = 0
+        for i in range(self.gh):
+            for j in range(self.gw):
+                if np.all(np.isfinite(img_grid[i,j,:,:])):
+                    avgpsf += img_grid[i,j,:,:]
+                    ngood += 1
+        assert(ngood > 0)
+        avgpsf /= ngood
+        self.avgpsf = avgpsf
+        #avgpsf = np.mean(img_grid, axis=(0,1))
         print('average psf img:', avgpsf.shape, 'sum', np.sum(avgpsf))
         fwhm = fit_circular_gaussian(avgpsf)
         print('Gaussian-fit FWHM:', fwhm)
@@ -303,7 +317,11 @@ class PiecewiseConstantPixelizedPsf(PixelizedPSF):
         assert(cell_y >= 0)
         assert(cell_y < self.gh)
         assert(cell_x < self.gw)
-        return self.img_grid[cell_y, cell_x, :, :]
+        psf = self.img_grid[cell_y, cell_x, :, :]
+        if np.all(np.isfinite(psf)):
+            return psf
+        print('PSF in cell [%i,%i] has NaNs - returning the image average PSF instead!' % (cell_y, cell_x))
+        return self.avgpsf
 
 
 

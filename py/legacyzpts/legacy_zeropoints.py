@@ -1794,6 +1794,13 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             # print('Inverse-variance map is all zero')
             continue
 
+        if not np.all(np.isfinite(subimg)):
+            print('subimg has some non-finite pixels!')
+            continue
+        if not np.all(np.isfinite(subie)):
+            print('subie has some non-finite pixels!')
+            continue
+
         subpsf = psf.constantPsfAt(x, y)
 
         tim = tractor.Image(data=subimg, inverr=subie, psf=subpsf)

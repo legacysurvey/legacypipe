@@ -530,6 +530,22 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg, **kw)
 
+    elif camera == 'lsstcoadd':
+        zp0 = 31.4
+        zp0_u = 30.0
+        dzp = 0.2
+        radec_rms = 0.2
+        skybright = {}
+        zpt_diff_avg = 0.1
+        bands = ['u','g','r','i','z','y']
+        zpt_lo = dict([(k, zp0-dzp) for k in bands])
+        zpt_hi = dict([(k, zp0+dzp) for k in bands])
+        # u cals suck
+        zpt_lo.update(u=zp0_u-dzp)
+        zpt_hi.update(u=zp0_u+dzp)
+        kw.update(phrms_cut=0.7)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, **kw)
     else:
         assert(False)
 
