@@ -2,6 +2,7 @@ import os
 import numpy as np
 from legacypipe.hsc import HscImage
 from legacypipe.image import LegacySurveyImage
+import tractor
 
 class LsstImage(HscImage):
     @classmethod
@@ -32,12 +33,12 @@ class LsstImage(HscImage):
         self.set_calib_filenames()
 
         # Try grabbing fwhm from PSFEx file, if it exists.
-        if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
-            try:
-                # PSF model file may not have been created yet...
-                self.fwhm = self.get_fwhm(None, None)
-            except:
-                pass
+        # if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
+        #     try:
+        #         # PSF model file may not have been created yet...
+        #         self.fwhm = self.get_fwhm(None, None)
+        #     except:
+        #         pass
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         """ps1stars: ps1.median 2D array of median mag for each band"""
@@ -93,8 +94,9 @@ class LsstImage(HscImage):
             # PSF model file may not have been created yet...
             psf = self.read_psf_model(0., 0., pixPsf=True)
         except:
-            #import traceback
-            #traceback.print_exc()
+            print('get_fwhm: Failed read PSF model:')
+            import traceback
+            traceback.print_exc()
             pass
         if psf is None:
             print("HACK - no FWHM readily available")
@@ -252,14 +254,56 @@ class LsstCoaddImage(LsstImage):
         # HACK
         return 1.
 
-from tractor.psf import PixelizedPSF
+    def remap_dq(self, dq, header, slc):
+        from legacypipe.bits import DQ_BITS
+        new_dq = np.zeros(dq.shape, np.int16)
+        print('Remapping LSST bitmasks')
+        masks = {}
+        for i in range(32):
+            key = 'MSKN%04i' % i
+            if not key in header:
+                break
+            bitval = 'MSKM%04i' % i
+            if not bitval in header:
+                break
+            masks[header[key]] = int(header[bitval])
+        def val(name):
+            return masks.get(name, 0)
 
-class PiecewiseConstantPixelizedPsf(PixelizedPSF):
+        bits = val('INTERPOLATED')
+        new_dq |= DQ_BITS['interp'] * ((dq & bits) != 0)
+        print('Interp:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+
+        bits = val('COSMIC_RAY')
+        new_dq |= DQ_BITS['cr'] * ((dq & bits) != 0)
+        print('CR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+
+        bits = val('SATURATED')
+        new_dq |= DQ_BITS['satur' ] * ((dq & bits) != 0)
+        print('SATUR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+
+        bits = val('DETECTION_EDGE')
+        new_dq |= DQ_BITS['edge'] * ((dq & bits) != 0)
+        print('Edge:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+
+        # omitting:
+        # NO_DATA
+        # CLIPPED
+        # REJECTED
+        # DETECTED
+        # INEXACT_PSF
+
+        return new_dq
+    
+from tractor.psf import PixelizedPSF, HybridPixelizedPSF, HybridPSF
+
+class PiecewiseConstantPixelizedPsf(PixelizedPSF, HybridPSF):
+#class PiecewiseConstantPixelizedPsf(HybridPixelizedPSF):
     '''
     A PSF class for the Rubin/LSST DeepCoadd PSF model, which has a
     constant PSF in each 150x150-pixel grid cell.
     '''
-    def __init__(self, img_grid, grid_size, x0=0, y0=0):
+    def __init__(self, img_grid, grid_size, x0=0, y0=0, fwhm=None, fwhm_grid=None):
         '''
         img_grid: (grid_h,grid_w, psf_h,psf_w) data cube
         grid_size: integer, scalar: size in pixels of the cells where PSFs are defined,
@@ -273,50 +317,99 @@ class PiecewiseConstantPixelizedPsf(PixelizedPSF):
         self.x0 = x0
         self.y0 = y0
 
+        # Here, I'm just using a single round Gaussian for the PSF approximation...
+        # could do the general elliptical or multi-component instead...
+        
+        if fwhm is None:
+            # compute FWHM from just averaging all the PSF images!
+            # (the catch: some cells can be all NaNs!!)
+            avgpsf = np.zeros((self.ph, self.pw))
+            ngood = 0
+            for i in range(self.gh):
+                for j in range(self.gw):
+                    if np.all(np.isfinite(img_grid[i,j,:,:])):
+                        avgpsf += img_grid[i,j,:,:]
+                        ngood += 1
+            assert(ngood > 0)
+            avgpsf /= ngood
+            self.avgpsf = avgpsf
+            #avgpsf = np.mean(img_grid, axis=(0,1))
+            print('average psf img:', avgpsf.shape, 'sum', np.sum(avgpsf))
+            fwhm_avg = fit_circular_gaussian(avgpsf)
+            print('Gaussian-fit FWHM:', fwhm_avg)
+            self.fwhm = fwhm_avg
+        else:
+            self.fwhm = fwhm
+
+        if fwhm_grid is None:
+            # Also precompute the Gaussian FWHM per cell.
+            self.fwhm_grid = np.zeros((self.gh, self.gw))
+            for i in range(self.gh):
+                for j in range(self.gw):
+                    if np.all(np.isfinite(img_grid[i,j,:,:])):
+                        fwhm = fit_circular_gaussian(img_grid[i,j,:,:])
+                    else:
+                        fwhm = fwhm_avg
+                    self.fwhm_grid[i,j] = fwhm
+        else:
+            self.fwhm_grid = fwhm_grid
+
         # call superclass constructor with the PSF in grid 0,0 to set parameters like .sampling
         super().__init__(self.img_grid[0, 0, :, :])
-        
-        # compute FWHM from just averaging all the PSF images!
-        # (the catch: some cells can be all NaNs!!)
-        avgpsf = np.zeros((self.ph, self.pw))
-        ngood = 0
-        for i in range(self.gh):
-            for j in range(self.gw):
-                if np.all(np.isfinite(img_grid[i,j,:,:])):
-                    avgpsf += img_grid[i,j,:,:]
-                    ngood += 1
-        assert(ngood > 0)
-        avgpsf /= ngood
-        self.avgpsf = avgpsf
-        #avgpsf = np.mean(img_grid, axis=(0,1))
-        print('average psf img:', avgpsf.shape, 'sum', np.sum(avgpsf))
-        fwhm = fit_circular_gaussian(avgpsf)
-        print('Gaussian-fit FWHM:', fwhm)
-        self.fwhm = fwhm
+
+    def getMixtureOfGaussians(self, px=None, py=None):
+        from tractor import mixture_profiles as mp
+        if px is None or py is None:
+            # image-wide average
+            fwhm = self.fwhm
+        else:
+            cell_y, cell_x = self._getCell(px, py)
+            fwhm = self.fwhm_grid[cell_y, cell_x]
+        sigma = fwhm * 2.35
+        gauss = tractor.NCircularGaussianPSF([sigma], [1.])
+        variance = np.eye(2).reshape((1,2,2)) * sigma**2
+        return mp.MixtureOfGaussians(np.ones(1), np.zeros((1,2)), variance)
 
     def __str__(self):
-        return 'PicewiseConstantPixelizedPsf'
+        return 'PiecewiseConstantPixelizedPsf'
 
     @property
     def shape(self):
         return (self.ph, self.pw)
 
     def copy(self):
-        return self.__class__(self.img_grid.copy(), self.grid_size, x0=self.x0, y0=self.y0)
+        return self.__class__(self.img_grid.copy(), self.grid_size, x0=self.x0, y0=self.y0,
+                              fwhm=self.fwhm, fwhm_grid=self.fwhm_grid.copy())
 
     def getShifted(self, x0, y0):
-        return self.__class__(self.img_grid.copy(), self.grid_size, x0=self.x0 + x0, y0=self.y0 + y0)
+        return self.__class__(self.img_grid.copy(), self.grid_size, x0=self.x0 + x0, y0=self.y0 + y0,
+                              fwhm=self.fwhm, fwhm_grid=self.fwhm_grid.copy())
 
     def constantPsfAt(self, x, y):
-        return PixelizedPSF(self.getImage(x, y))
+        #return PixelizedPSF(self.getImage(x, y))
+        #psf = tractor.NCircularGaussianPSF([2.5], [1.])
+        pix = self.getImage(x, y)
+        pixpsf = PixelizedPSF(pix)
+        cell_y, cell_x = self._getCell(x, y)
+        fwhm = self.fwhm_grid[cell_y, cell_x]
+        sigma = fwhm * 2.35
+        gauss = tractor.NCircularGaussianPSF([sigma], [1.])
+        return HybridPixelizedPSF(pixpsf, gauss=gauss)
+
+    def _getCell(self, px, py):
+        cell_x = int((px + self.x0) // self.grid_size)
+        cell_y = int((py + self.y0) // self.grid_size)
+        #assert(cell_x >= 0)
+        #assert(cell_y >= 0)
+        #assert(cell_y < self.gh)
+        #assert(cell_x < self.gw)
+        # clip
+        cell_x = max(0, min(cell_x, self.gw-1))
+        cell_y = max(0, min(cell_y, self.gh-1))
+        return cell_y,cell_x
 
     def getImage(self, px, py):
-        cell_x = int((px - self.x0) // self.grid_size)
-        cell_y = int((py - self.y0) // self.grid_size)
-        assert(cell_x >= 0)
-        assert(cell_y >= 0)
-        assert(cell_y < self.gh)
-        assert(cell_x < self.gw)
+        cell_y, cell_x = self._getCell(px, py)
         psf = self.img_grid[cell_y, cell_x, :, :]
         if np.all(np.isfinite(psf)):
             return psf
