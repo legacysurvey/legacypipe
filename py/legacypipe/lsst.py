@@ -156,6 +156,13 @@ class LsstCoaddImage(LsstImage):
         basename = self.get_base_name()
         self.name = basename
 
+    # LSST deepCoadds: defined on tracts & patches.  There is overlap between tracts
+    # and also between patches.  The patches overlaps are simple: they're just 150 pix.
+    # This conveniently matches the coadd cell size.  Here we're going to hardcode the
+    # fact that the coadds are 22 x 22 cells = 3300 x 3300 pixels.
+    def get_good_image_subregion(self):
+        return 150, 3150, 150, 3150
+
     def get_band(self, primhdr):
         # HIERARCH LSST BUTLER DATAID BAND = 'g      '
         band = primhdr['LSST BUTLER DATAID BAND']
@@ -270,28 +277,66 @@ class LsstCoaddImage(LsstImage):
         def val(name):
             return masks.get(name, 0)
 
-        bits = val('INTERPOLATED')
-        new_dq |= DQ_BITS['interp'] * ((dq & bits) != 0)
-        print('Interp:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        # The coadd bitmasks are pretty weird: some are ORs of the inputs
 
-        bits = val('COSMIC_RAY')
-        new_dq |= DQ_BITS['cr'] * ((dq & bits) != 0)
-        print('CR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        # 'NO_DATA '
+        # 'No data was available for this pixel.'
 
-        bits = val('SATURATED')
-        new_dq |= DQ_BITS['satur' ] * ((dq & bits) != 0)
-        print('SATUR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        # 'INTERPOLATED'
+        # 'Pixel value is the result of interpolating nearby good pixels.'
 
-        bits = val('DETECTION_EDGE')
-        new_dq |= DQ_BITS['edge'] * ((dq & bits) != 0)
-        print('Edge:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        #  'COSMIC_RAY'
+        # 'A cosmic ray affected this pixel on at least one input image (and &'
+        # 'was interpolated).'
 
-        # omitting:
-        # NO_DATA
-        # CLIPPED
-        # REJECTED
-        # DETECTED
-        # INEXACT_PSF
+        # 'SATURATED'
+        # 'More than 10% of the potential input visits had a saturated pixel &'
+        # 'at this location (''potential'' because saturated pixel values are &'
+        # 'not actually propagated to the coadd). SATURATED always implies &'
+        # 'REJECTED, and is often a reason for NO_DATA.'
+
+        # 'DETECTION_EDGE'
+        # 'Pixel was too close to the edge of the patch to be considered for &'
+        # 'detection, due to the finite size of the detection kernel.'
+
+        # 'CLIPPED '
+        # 'Region was identified as a probable artifact when comparing &'
+        # 'multiple single-visit warps. CLIPPED always implies REJECTED.'
+
+        # 'REJECTED'
+        # 'At least one input visit was left out of the coadd for this pixel &'
+        # 'due to masking. REJECTED always implies INEXACT_PSF.'
+
+        # 'DETECTED'
+        # 'Pixel was part of a detected source.'
+
+        # 'INEXACT_PSF'
+        # 'The set of visits contributing to this pixel differs from the set &'
+        # 'of visits contributing to the PSF model for its cell.'
+
+        no = val('NO_DATA') | val('INTERPOLATED')
+        new_dq |= DQ_BITS['badpix'] * ((no & bits) != 0)
+
+        # We only want to mark pixels SATUR if they end up having NO_DATA because _all_
+        # the exposures are saturated.  This isn't exactly what the condition below does!
+        sat = val('SATURATED')
+        new_dq |= DQ_BITS['satur'] * np.logical_and((no & bits) != 0, (sat & bits) != 0)
+
+        # bits = val('INTERPOLATED')
+        # new_dq |= DQ_BITS['interp'] * ((dq & bits) != 0)
+        # print('Interp:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        # 
+        # bits = val('COSMIC_RAY')
+        # new_dq |= DQ_BITS['cr'] * ((dq & bits) != 0)
+        # print('CR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        # 
+        # bits = val('SATURATED')
+        # new_dq |= DQ_BITS['satur' ] * ((dq & bits) != 0)
+        # print('SATUR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        # 
+        # bits = val('DETECTION_EDGE')
+        # new_dq |= DQ_BITS['edge'] * ((dq & bits) != 0)
+        # print('Edge:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
 
         return new_dq
     
