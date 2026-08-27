@@ -315,12 +315,12 @@ class LsstCoaddImage(LsstImage):
         # 'of visits contributing to the PSF model for its cell.'
 
         no = val('NO_DATA') | val('INTERPOLATED')
-        new_dq |= DQ_BITS['badpix'] * ((no & bits) != 0)
+        new_dq |= DQ_BITS['badpix'] * ((no & dq) != 0)
 
         # We only want to mark pixels SATUR if they end up having NO_DATA because _all_
         # the exposures are saturated.  This isn't exactly what the condition below does!
         sat = val('SATURATED')
-        new_dq |= DQ_BITS['satur'] * np.logical_and((no & bits) != 0, (sat & bits) != 0)
+        new_dq |= DQ_BITS['satur'] * np.logical_and((no & dq) != 0, (sat & dq) != 0)
 
         # bits = val('INTERPOLATED')
         # new_dq |= DQ_BITS['interp'] * ((dq & bits) != 0)
