@@ -240,7 +240,8 @@ def psf_zeropoint_cuts(P, pixscale,
 
     plver_ok = np.array([(v.startswith('V4.8') or
                           v.startswith('V4.9') or
-                          v.startswith('V5'))
+                          v.startswith('V5') or
+                          v.startswith('V6'))
                           for v in P.plver])
 
     cuts = [
