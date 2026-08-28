@@ -725,6 +725,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brick=None, blobmap=None, lanczos=True, ccds=None,
                        write_metrics=True,
                        minimal_coadds=False,
+                       nsatur=None,
                        mp=None, record_event=None,
                        co_sky=None,
                        custom_brick=False,
@@ -774,6 +775,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     C = make_coadds(tims, bands, targetwcs, lanczos=lanczos,
                     callback=write_coadd_images,
+                    nsatur=nsatur,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky),
                     mp=mp, plots=plots, ps=ps, **kw)
@@ -4670,6 +4672,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if remake_outlier_jpegs:
         cache_outliers = True
+
+    if nsatur is None:
+        nsatur = 1
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
                   forced_bands=forced_bands,

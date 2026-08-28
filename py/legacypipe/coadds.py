@@ -113,7 +113,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
         info('Band', band, ':', len(I), 'CCDs')
 
         mods = blobmods = False
-        unweighted=True
+        unweighted = True
         ngood = True
         xy = allmasks = anymasks = None
         psfsize = do_max = psf_images = False
@@ -479,6 +479,7 @@ class Coadd(object):
                 for bitname in ['satur']:
                     okbits |= DQ_BITS[bitname]
                 brightpix = ((dq & okbits) != 0)
+                #print('accumulating', tim, ':', np.sum(brightpix), 'SATUR pixels setting to', self.satur_val)
                 if self.satur_val is not None:
                     # HACK -- force SATUR pix to be bright
                     im[brightpix] = self.satur_val
@@ -616,6 +617,7 @@ class Coadd(object):
 
         if self.nsatur:
             self.satmap = (self.satmap >= self.nsatur)
+            #print('finish: nsatur=', self.nsatur, '; setting', np.sum(self.satmap), 'satmap pixels')
 
         if self.psf_images:
             self.psf_img /= np.sum(self.psf_img)
@@ -628,6 +630,7 @@ class Coadd(object):
             #    _make_coadds_plots_3(cowimg, cow, coimg, band, ps)
 
             # Patch pixels with no data in the weighted coadd.
+            print('patching', np.sum(self.cow == 0), 'pixels in weighted-coadd with unweighted coadd')
             self.cowimg[self.cow == 0] = self.coimg[self.cow == 0]
             del self.coimg
             if self.mods:
@@ -806,6 +809,24 @@ def make_coadds(tims, bands, targetwcs,
                              mjd_args,cb_data)
 
             del Yo,Xo,iv,im,mo,bmo,dq,cb_data,R
+
+        if plots:
+            import pylab as plt
+            plt.clf()
+            ima = dict(interpolation='nearest', origin='lower')
+            ima2 = ima.copy()
+            ima2.update(vmin=-0.1, vmax=+0.1)
+            plt.subplot(2,2,1)
+            plt.title('Weighted coadd')
+            plt.imshow(coadd.cowimg / np.maximum(coadd.cow, 1e-30), **ima2)
+            plt.subplot(2,2,2)
+            plt.title('weight=0')
+            plt.imshow(coadd.cow == 0, vmin=0, vmax=1, **ima)
+            plt.subplot(2,2,3)
+            plt.title('Unweighted coadd')
+            plt.imshow(coadd.coimg, **ima2)
+            plt.suptitle('band %s' % band)
+            ps.savefig()
 
         coadd.finish()
 

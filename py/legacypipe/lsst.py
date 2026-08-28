@@ -274,10 +274,12 @@ class LsstCoaddImage(LsstImage):
             if not bitval in header:
                 break
             masks[header[key]] = int(header[bitval])
+        print('Masks:', masks)
         def val(name):
             return masks.get(name, 0)
 
-        # The coadd bitmasks are pretty weird: some are ORs of the inputs
+        # The coadd bitmasks are pretty weird: some are ORs of the inputs,
+        # some are quantile-based, some are ANDs
 
         # 'NO_DATA '
         # 'No data was available for this pixel.'
@@ -314,29 +316,23 @@ class LsstCoaddImage(LsstImage):
         # 'The set of visits contributing to this pixel differs from the set &'
         # 'of visits contributing to the PSF model for its cell.'
 
-        no = val('NO_DATA') | val('INTERPOLATED')
-        new_dq |= DQ_BITS['badpix'] * ((no & dq) != 0)
-
         # We only want to mark pixels SATUR if they end up having NO_DATA because _all_
         # the exposures are saturated.  This isn't exactly what the condition below does!
+        # we ALSO want to un-set the "badpix" mask for SATUR pix!
+        # (if not, the coadd code won't fill these pixels with bright values)
+        bad = val('NO_DATA') | val('INTERPOLATED')
         sat = val('SATURATED')
-        new_dq |= DQ_BITS['satur'] * np.logical_and((no & dq) != 0, (sat & dq) != 0)
 
-        # bits = val('INTERPOLATED')
-        # new_dq |= DQ_BITS['interp'] * ((dq & bits) != 0)
-        # print('Interp:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
-        # 
-        # bits = val('COSMIC_RAY')
-        # new_dq |= DQ_BITS['cr'] * ((dq & bits) != 0)
-        # print('CR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
-        # 
-        # bits = val('SATURATED')
-        # new_dq |= DQ_BITS['satur' ] * ((dq & bits) != 0)
-        # print('SATUR:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
-        # 
-        # bits = val('DETECTION_EDGE')
-        # new_dq |= DQ_BITS['edge'] * ((dq & bits) != 0)
-        # print('Edge:', np.sum((dq & bits) != 0), 'pixels have mask val 0x%x set' % bits)
+        set_sat = np.logical_and((bad & dq) != 0, (sat & dq) != 0)
+        set_bad = np.logical_and((bad & dq) != 0, (sat & dq) == 0)
+
+        new_dq |= (DQ_BITS['badpix'] * set_bad)
+        new_dq |= (DQ_BITS['satur'] * set_sat)
+
+        print('NO_DATA or INTERPOLATED:', np.sum((dq & bad) != 0), 'pixels have mask val 0x%x set' % bad)
+        print('SATUR:', np.sum((dq & sat) != 0), 'pixels have mask val 0x%x set' % sat)
+        print('Setting', np.sum(set_bad), 'pixels BADPIX')
+        print('Setting', np.sum(set_sat), 'pixels SATUR')
 
         return new_dq
     
