@@ -148,6 +148,9 @@ class LsstCoaddImage(LsstImage):
             y = zpt,
         )
     
+    def get_zeropoint(self, primhdr, hdr):
+        return 31.4
+
     # Like HSC, we're going to use the calibrations built into the deepCoadd files.
     # hence no external calib filenames.
     def set_calib_filenames(self):
