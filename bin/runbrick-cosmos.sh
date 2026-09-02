@@ -4,9 +4,6 @@
 
 # The COSMOS deep field reduction was run using the docker image docker:legacysurvey/legacypipe:DR10.0.0
 
-# we're not using the burst-buffer, but here's how one would use it, where "DR9" is the name of your BB:
-#if [ "x$DW_PERSISTENT_STRIPED_DR9" == x ]; then
-
 export SCR=/pscratch/sd/r/rongpu
 
 export LEGACY_SURVEY_DIR=$SCR/tractor/deep_fields/cosmos/
@@ -56,7 +53,8 @@ log="$outdir/logs/$bri/$brick.log"
 echo Logging to: "$log"
 #echo Running on $(hostname)
 
-# # Config directory nonsense
+# Some packages (astropy, matplotlib) need their config directory to be writable,
+# so we need to copy files from the container to a temp direcotry before starting
 export TMPCACHE=$(mktemp -d)
 mkdir $TMPCACHE/cache
 mkdir $TMPCACHE/config
@@ -99,21 +97,11 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --width 496 --height 496 \
       >> "$log" 2>&1
 
-# --no-wise-ceres helps for very dense fields.
-#     --no-wise-ceres \
-#     --write-stage coadds \
-#     --write-stage wise_forced \
-# 8 threads -> 14 gb
-#     --run south \
-#     --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
-#     --ps-t0
-
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!
 status=$?
 
-# /Config directory nonsense
+# Remove the temporary directory we created for config files (astropy, matplotlib)
 rm -R $TMPCACHE
 
 exit $status
-
