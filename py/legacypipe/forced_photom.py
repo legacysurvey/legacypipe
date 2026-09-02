@@ -594,7 +594,12 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         Igaia, = np.nonzero(gaia.isgaia * gaia.pointsource)
         halostars = gaia[Igaia]
         moffat = True
-        _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
+        radius_scaling = 1.
+
+        kw = survey.get_halo_kwargs()
+        radius_scaling = kw.get('radius_scaling', radius_scaling)
+
+        _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok, radius_scaling))
         tim.data -= halos
         tim.setImage(tim.data)
 

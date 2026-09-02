@@ -135,14 +135,14 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
     if outlier_mask_file is None:
         if output == 'both':
             # Try both output=True and then output=False.
-            fn = survey.find_file('outliers_mask', brick=brickname, output=True)
+            fn = survey.find_file('outliers-mask', brick=brickname, output=True)
             if not os.path.exists(fn):
-                fn2 = survey.find_file('outliers_mask', brick=brickname, output=False)
+                fn2 = survey.find_file('outliers-mask', brick=brickname, output=False)
                 info('Outlier mask does not exist:', fn)
                 info('Trying outlier mask:', fn2)
                 fn = fn2
         else:
-            fn = survey.find_file('outliers_mask', brick=brickname, output=output)
+            fn = survey.find_file('outliers-mask', brick=brickname, output=output)
     else:
         fn = outlier_mask_file
     if not os.path.exists(fn):
