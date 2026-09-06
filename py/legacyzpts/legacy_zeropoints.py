@@ -560,10 +560,9 @@ class outputFns(object):
         basename = os.path.basename(self.imgfn)
         # zpt,star fns
         base = basename
-        if base.endswith('.fz'):
-            base = base[:-len('.fz')]
-        if base.endswith('.fits'):
-            base = base[:-len('.fits')]
+        for suff in ['.fz', '.fits', '.fit', '.flt']:
+            if base.endswith(suff):
+                base = base[:-len(suff)]
         if debug:
             base += '-debug'
         self.photomfn = os.path.join(basedir, base + '-photom.fits')
