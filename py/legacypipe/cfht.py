@@ -892,3 +892,15 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         from legacypipe.ps1cat import ps1_to_cfht
         return ps1_to_cfht(ps1stars, band)
     
+    def set_calib_filenames(self):
+        super().set_calib_filenames()
+        calibdir = self.survey.get_calib_dir()
+        imgdir = os.path.dirname(self.image_filename)
+        basename = self.get_base_name()
+        calname = self.name
+        self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-scamp.head')
+        # ugh drop a directory component off these filenames (relative to superclass)
+        self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir,
+                                           calname + '.wcs')
+        self.lacosmic_fn = os.path.join(calibdir, 'lacosmic', imgdir,
+                                        calname + '-cr.fits')
