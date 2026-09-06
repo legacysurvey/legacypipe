@@ -511,20 +511,25 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         print('Reading Scamp file', self.scamp_fn, 'HDU', self.hdu)
         lines = open(self.scamp_fn,'rb').readlines()
         lines = [line.strip() for line in lines]
-        iline = 0
-        header = []
-        # find my HDU in the header
-        for _ in range(1, self.hdu+1):
+
+        if self.hdu == 0:
+            # quicklook images: single-HDU
+            header = lines
+        else:
+            iline = 0
             header = []
-            while True:
-                if iline >= len(lines):
-                    raise RuntimeError('Failed to find HDU %i in Scamp header file %s' %
-                                       (self.hdu, self.scamp_fn))
-                line = lines[iline]
-                header.append(line)
-                iline += 1
-                if line == b'END':
-                    break
+            # find my HDU in the header
+            for _ in range(1, self.hdu+1):
+                header = []
+                while True:
+                    if iline >= len(lines):
+                        raise RuntimeError('Failed to find HDU %i in Scamp header file %s' %
+                                           (self.hdu, self.scamp_fn))
+                    line = lines[iline]
+                    header.append(line)
+                    iline += 1
+                    if line == b'END':
+                        break
 
         # print('Keeping Scamp header:')
         # for line in header:
