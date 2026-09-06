@@ -38,14 +38,12 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
     # Compute image filename
     print('Relative path', relpath)
     imgfn = os.path.join(survey_dir, 'images', relpath).replace('-photom.fits', '')
-    # check for existence of image file without the .fits suffix (eg, CFHT quicklook files are .flt)
-    if os.path.exists(imgfn):
-        pass
-    else:
-        # check for .fits and then .fits.fz
-        imgfn += '.fits'
-        if not os.path.exists(imgfn) and os.path.exists(imgfn + '.fz'):
-            imgfn += '.fz'
+
+    # check for no suffix, .fits, .fits.fz, .flt
+    for suff in ['', '.fits', '.fits.fz', '.flt']:
+        if os.path.exists(imgfn + suff):
+            imgfn = imgfn + suff
+            break
     #print('Img filename', imgfn)
     P = fits_table(photom_fn)
     P.sn = P.flux/P.dflux
