@@ -37,7 +37,9 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
 
     # Compute image filename
     print('Relative path', relpath)
-    imgfn = os.path.join(survey_dir, 'images', relpath).replace('-photom.fits', '')
+    basename = relpath.replace('-photom.fits', '')
+    imgfn = os.path.join(survey_dir, 'images', basename)
+    #imgbase = imgfn
 
     # check for no suffix, .fits, .fits.fz, .flt
     for suff in ['', '.fits', '.fits.fz', '.flt']:
@@ -101,8 +103,10 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
                 newhdr[c] = imghdr[c]
 
         # Read Astrometry.net initial WCS header!
-        imgid = os.path.basename(imgfn).replace('.fits','').replace('.fz', '')
-        wcsfn = imgfn.replace('images', 'calib/wcs-initial').replace('.fits', '').replace('.fz','') + '/%s-%s.wcs' % (imgid, ccd)
+        #imgid = os.path.basename(imgfn).replace('.fits','').replace('.fz', '')
+        imgid = basename
+        #wcsfn = basename.replace('images', 'calib/wcs-initial').replace('.fits', '').replace('.fz','') + '/%s-%s.wcs' % (imgid, ccd)
+        wcsfn = os.path.join(survey_dir, 'calib', 'wcs-initial', '%s-%s.wcs' % (basename, ccd))
         if not os.path.exists(wcsfn):
             print('WARNING: Initial (Astrometry.net) WCS file not found:', wcsfn)
             # Copy from input image header.  HOPEFULLY this doesn't matter because if
