@@ -1452,7 +1452,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 F.full_fit_flux[i] = src2.getBrightness().getFlux(tim.band)
 
                 F.full_fit_dra_ivar [i] = 1./3600.**2 * (ivs[0] / cosdec**2)
-                F.full_fit_ddec_ivar[i] = 1./3600.**2 * (ivs[1] / cosdec**2)
+                F.full_fit_ddec_ivar[i] = 1./3600.**2 *  ivs[1]
                 F.full_fit_flux_ivar[i] = ivs[2]
 
                 _,x,y = tim.subwcs.radec2pixelxy(pos2.ra, pos2.dec)
