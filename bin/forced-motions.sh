@@ -14,10 +14,16 @@ survey_dir=$dr10
 
 export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr10/calib/sky_pattern
 export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-export GAIA_CAT_DIR=$COSMO/data/gaia/edr3/healpix
+
+export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
-export GAIA_CAT_VER=E
+export GAIA_CAT_VER=3
+
+# export GAIA_CAT_DIR=$COSMO/data/gaia/edr3/healpix
+# export GAIA_CAT_PREFIX=healpix
+# export GAIA_CAT_SCHEME=nested
+# export GAIA_CAT_VER=E
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -47,7 +53,9 @@ export MPLCONFIGDIR=$TMPCACHE/matplotlib
 mkdir $MPLCONFIGDIR
 cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
 
-#export PYTHONPATH=.:${PYTHONPATH}
+# Use local code
+export LEGACYPIPE_DIR=$(pwd)
+export PYTHONPATH=${LEGACYPIPE_DIR}:${PYTHONPATH}
 
 python -O $LEGACYPIPE_DIR/legacypipe/forced_photom_brickwise.py \
        --brick $brick \
