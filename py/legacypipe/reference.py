@@ -614,7 +614,9 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
     if bands is not None:
-        galaxies.sources[:] = get_galaxy_sources(galaxies, bands)
+        # drop any with type=""
+        Iok = np.flatnonzero(galaxies.type != "")
+        galaxies.sources[Iok] = get_galaxy_sources(galaxies[Iok], bands)
 
     if clean_columns:
         keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
