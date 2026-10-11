@@ -210,7 +210,11 @@ class MegaPrimeImage(LegacySurveyImage):
         ps1band_map = ps1cat.ps1band
         if name == 'ps1':
             # u->g, CaHK->g
-            ps1band = dict(u='g', CaHK='g', M4376='g').get(self.band, self.band)
+            ps1band = dict(u='g',
+                           CaHK='g',
+                           M4376='g',
+                           M4112='g',
+                           ).get(self.band, self.band)
             ps1band_index = ps1band_map[ps1band]
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
             colorterm = self.clip_colorterm(colorterm)
@@ -399,6 +403,9 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         super().__init__(*args, **kwargs)
 
         self.zp0.update(
+            # HACK M4112
+            #M4112 = 24.28,
+            M4112 = 24.24,
             M4376 = 24.80,
         )
         self.k_ext.update(
