@@ -1,4 +1,4 @@
-FROM ubuntu:24.04 AS working
+FROM ubuntu:26.04 AS working
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -31,7 +31,7 @@ RUN apt -y update && apt install -y apt-utils \
     wcslib-dev \
     wcslib-tools \
     zlib1g-dev \
-    libatlas-base-dev \
+    libatlas3-base \
     libbz2-dev \
     libcairo2-dev \
     libcfitsio-dev \
@@ -40,20 +40,22 @@ RUN apt -y update && apt install -y apt-utils \
     libfftw3-dev \
     libgsl-dev \
     libjpeg-dev \
-    libnetpbm10-dev \
+    libnetpbm-dev \
     libpng-dev \
     libeigen3-dev \
     libgoogle-glog-dev \
     libceres-dev \
     postgresql-common \
     libpq-dev \
-    python3.12 \
-    python3.12-dev \
+    python3.14 \
+    python3.14-dev \
     python3-pip \
+    python-is-python3 \
     plplot-driver-cairo \
     libplplot-dev \
     source-extractor \
     psfex \
+    scamp \
     patchelf \
     # Remove APT files
     && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -91,8 +93,8 @@ RUN for x in \
     django \
 ; do pip3 install --break-system-packages --no-cache $x; done
 
-RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
-RUN ln -s /usr/bin/python3 /usr/bin/python
+#RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
+#RUN ln -s /usr/bin/python3 /usr/bin/python
 ENV PYTHON=python3
 ENV PYTHON_CONFIG=python3-config
 ENV PYTHON_SCRIPT="/usr/bin/env python3"
@@ -107,7 +109,7 @@ RUN ln -s /usr/include /usr/local/include/netpbm
 ENV ARCH_FLAGS=-march=x86-64-v3
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
-    && git checkout 0.98 \
+    && git checkout 0.99 \
     && make \
     && make py \
     && make install INSTALL_DIR=/usr/local
@@ -140,23 +142,25 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   && python -c "import astropy" \
   && python -c "import matplotlib.font_manager as fm; f = fm.FontManager()" \
   # Download astropy site locations and USNO sky model
-  && python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)" \
+  && python -c "from astropy.coordinates import EarthLocation; EarthLocation.get_site_names(refresh_cache=True)" \
   && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))" \
   # Download astropy IERS leap-second list
-  && python -c "from astropy.time import Time; Time.now()" \
-  # Make astropy cache files readable!?!!
-  && chmod -R a+rwX $HOME/.astropy
+  && python -c "from astropy.time import Time; Time.now()"
 
-# Compile a local version of Scamp to pick up adding EXTNAME to the results:
-# https://github.com/astromatic/scamp/commit/d936c73d7dd08382b70cb32ceb1a535ffca81732
-# (that's in 2.14.0; ubuntu currently has 2.10.0 (as of 2026-03-07))
-RUN git clone https://github.com/astromatic/scamp.git && \
-    cd scamp && \
-    ./autogen.sh && \
-    ./configure --enable-plplot && \
-    make && \
-    make install && \
-    make clean
+#\
+#  # Make astropy cache files readable!?!!
+#  && chmod -R a+rwX $HOME/.astropy
+
+# # Compile a local version of Scamp to pick up adding EXTNAME to the results:
+# # https://github.com/astromatic/scamp/commit/d936c73d7dd08382b70cb32ceb1a535ffca81732
+# # (that's in 2.14.0; ubuntu currently has 2.10.0 (as of 2026-03-07))
+# RUN git clone https://github.com/astromatic/scamp.git && \
+#     cd scamp && \
+#     ./autogen.sh && \
+#     ./configure --enable-plplot && \
+#     make && \
+#     make install && \
+#     make clean
 
 # NERSC's shifter "mpich" module includes a bunch of BROKEN libraries that interfere
 # with executables we have installed.
@@ -164,6 +168,7 @@ RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/lis
 RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/modhead
 
 # Add the stuff that John needs from the "cutouts" container
+
 RUN git clone https://github.com/legacysurvey/imagine.git \
  && cd imagine/viewer \
  && ln -s settings_test.py settings.py \
@@ -172,6 +177,37 @@ RUN git clone https://github.com/legacysurvey/imagine.git \
  && ln -s /dvs_ro/cfs/cdirs/cosmo/webapp/viewer/data . \
  && cp /src/imagine/docker/cutouts/cutout /usr/local/bin/ \
  && chmod 755 /usr/local/bin/cutout
+
+# Cuda
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+ && dpkg -i cuda-keyring_1.1-1_all.deb \
+ && apt update \
+ && apt install -y cuda-toolkit-13-2 \
+ && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN python -m pip install --no-cache-dir --break-system-packages cupy-cuda13x
+RUN python -m pip install pynvtx --break-system-packages
+
+# the "cutout" script wants the "imagine" code to be in /app/imagine
+RUN ln -s /src /app
+
+# # The Tractor
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
+  && cd tractor \
+  && git fetch \
+  && git pull \
+  && python setup.py build_ext --with-ceres --with-cython --inplace \
+  && pip install . --break-system-packages \
+  && echo dr11.1 && git describe
+
+RUN git clone https://github.com/legacysurvey/legacypipe.git \
+  && cd legacypipe \
+  && git pull \
+  && git checkout DR11.1.0 \
+  && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
+  && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
+  && git describe \
+  && echo should be DR11.1.0
 
 ENV PYTHONPATH=/src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/imagine
 SHELL ["/bin/bash", "-c"]
@@ -193,33 +229,6 @@ RUN python -O -m compileall \
     /usr/local/lib/python \
     /src/unwise_psf/py
 
-# Cuda
-RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
- && dpkg -i cuda-keyring_1.1-1_all.deb \
- && apt update \
- && apt install -y cuda-toolkit-13-2 \
- && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-RUN python -m pip install --no-cache-dir --break-system-packages cupy-cuda13x
-RUN python -m pip install pynvtx --break-system-packages
-
-# # The Tractor
-RUN git clone https://github.com/dstndstn/tractor.git tractor \
-  && cd tractor \
-  && git fetch \
-  && git pull \
-  && python setup.py build_ext --with-ceres --with-cython --inplace \
-  && pip install . --break-system-packages \
-  && echo dr11.0 && git describe
-
-RUN git clone https://github.com/legacysurvey/legacypipe.git \
-  && cd legacypipe \
-  && git pull \
-  && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-  && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-  && git describe \
-  && echo dr11.0.0
-
 # For Nsight Systems profiler --
 #RUN wget https://developer.nvidia.com/downloads/assets/tools/secure/nsight-systems/2026_1/NsightSystems-linux-cli-public-2026.1.2.63-3729663.deb
 #RUN dpkg -i NsightSystems-linux-cli-public-2026.1.2.63-3729663.deb
@@ -227,3 +236,5 @@ RUN git clone https://github.com/legacysurvey/legacypipe.git \
 # OR
 # apt install cuda-nsight-systems-13-2
 # or cuda-nsight-13-2 ?
+
+RUN cd /src/imagine && git pull && echo 3
