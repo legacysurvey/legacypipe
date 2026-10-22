@@ -203,11 +203,11 @@ RUN git clone https://github.com/dstndstn/tractor.git tractor \
 RUN git clone https://github.com/legacysurvey/legacypipe.git \
   && cd legacypipe \
   && git pull \
-  && git checkout DR11.1.0 \
+  && git checkout DR11.2.0 \
   && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && git describe \
-  && echo should be DR11.1.0
+  && echo should be DR11.2.0
 
 ENV PYTHONPATH=/src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/imagine
 SHELL ["/bin/bash", "-c"]
@@ -237,4 +237,4 @@ RUN python -O -m compileall \
 # apt install cuda-nsight-systems-13-2
 # or cuda-nsight-13-2 ?
 
-RUN cd /src/imagine && git pull && echo 3
+#RUN cd /src/imagine && git pull && echo 3
