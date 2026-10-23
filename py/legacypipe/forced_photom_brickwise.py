@@ -241,6 +241,9 @@ def main():
     gitver = get_git_version()
     hdr.add_record(dict(name='FORCEDV', value=gitver,
                         comment='forced-photom legacypipe git version'))
+    # Add a card to indicate that a bug in the "full_fit_ddec_ivar" column is fixed
+    hdr.add_record(dict(name='DDIVFIX', value=True,
+                        comment='FULL_FIT_DDEC_IVAR bug fixed'))
     deps = get_dependency_versions(None, None, None, None, mpl=False)
     for name,value,comment in deps:
         hdr.add_record(dict(name=name, value=value, comment=comment))
