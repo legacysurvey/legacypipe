@@ -111,7 +111,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('nstars_astrom', 'i2'),
         ('phoff', 'f4'),
         ('ccdphrms', 'f4'),
-        ('phrmsavg', 'f4'),
+        ('phrms', 'f4'),
         ('ccdzpt', 'f4'),
         ('ccdraoff',  'f4'),
         ('ccddecoff', 'f4'),
@@ -182,7 +182,7 @@ def prep_survey_table(T, camera=None, bad_expid=None):
                   #('decrmeds', 'ccddecrmeds'),
                   #('bprp', 'ccdbprp'),
                   #('phrms', 'ccdphrms'),
-                  ('phrmsavg', 'phrms'),
+                  #('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
                   ('nstars_photom','ccdnphotom'),
                   ('nstars_photom_used','ccdnphotom_used')]
@@ -435,7 +435,7 @@ def measure_image(img_fn, mp, image_dir='images',
     phrms = all_ccds['ccdphrms']
     phrmsgood = np.isfinite(phrms) & (all_ccds['ccdphrms'] > 0)
     if np.sum(phrmsgood) > 0:
-        all_ccds['phrmsavg'] = np.median(phrms[phrmsgood])
+        all_ccds['phrms'] = np.median(phrms[phrmsgood])
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_photom, img
