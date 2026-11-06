@@ -671,10 +671,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         med = Sip(medfn)
         med.set_crval(tan.crval)
         #print('Median SIP header + CRVAL:', med)
-        # must set these to zero before ensure_inverse_polynomials()!
-        med.ap_order = 0
-        med.bp_order = 0
-        med.ensure_inverse_polynomials()
 
         # Apply raoff,decoff
         dra,ddec = self.dradec
