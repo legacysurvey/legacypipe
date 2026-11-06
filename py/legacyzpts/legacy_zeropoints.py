@@ -102,8 +102,8 @@ def _ccds_table(camera='decam', overrides=None):
         # -- CCD-level quantities --
         ('ra', 'f8'),
         ('dec', 'f8'),
-        ('skysb', 'f4'),
-        ('skycounts', 'f4'),
+        ('ccdskysb', 'f4'),
+        ('ccdskycounts', 'f4'),
         ('skyrms', 'f4'),
         ('sig1', 'f4'),
         ('nstars_photom', 'i2'),
@@ -113,15 +113,15 @@ def _ccds_table(camera='decam', overrides=None):
         ('phrms', 'f4'),
         ('phrmsavg', 'f4'),
         ('ccdzpt', 'f4'),
-        ('raoff',  'f4'),
-        ('decoff', 'f4'),
-        ('rarms',  'f4'),
-        ('decrms', 'f4'),
-        ('rarmeds',  'f4'),
-        ('decrmeds', 'f4'),
+        ('ccdraoff',  'f4'),
+        ('ccddecoff', 'f4'),
+        ('ccdrarms',  'f4'),
+        ('ccddecrms', 'f4'),
+        ('ccdrarmeds',  'f4'),
+        ('ccddecrmeds', 'f4'),
         ('rastddev',  'f4'),
         ('decstddev', 'f4'),
-        ('bprp', 'f4'),
+        ('ccdbprp', 'f4'),
         ]
 
     if overrides is not None:
@@ -172,15 +172,15 @@ def prep_survey_table(T, camera=None, bad_expid=None):
     # Rename
     rename_keys= [#('zpt','ccdzpt'),
                   #('zptavg','zpt'),
-                  ('raoff','ccdraoff'),
-                  ('decoff','ccddecoff'),
-                  ('skycounts', 'ccdskycounts'),
-                  ('skysb', 'ccdskysb'),
-                  ('rarms',  'ccdrarms'),
-                  ('decrms', 'ccddecrms'),
-                  ('rarmeds',  'ccdrarmeds'),
-                  ('decrmeds', 'ccddecrmeds'),
-                  ('bprp', 'ccdbprp'),
+                  #('raoff','ccdraoff'),
+                  #('decoff','ccddecoff'),
+                  #('skycounts', 'ccdskycounts'),
+                  #('skysb', 'ccdskysb'),
+                  #('rarms',  'ccdrarms'),
+                  #('decrms', 'ccddecrms'),
+                  #('rarmeds',  'ccdrarmeds'),
+                  #('decrmeds', 'ccddecrmeds'),
+                  #('bprp', 'ccdbprp'),
                   ('phrms', 'ccdphrms'),
                   ('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
@@ -1048,8 +1048,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     print('Sky level: %.2f count/pix' % skymed)
     print('Sky brightness: %.3f mag/arcsec^2 (assuming nominal zeropoint)' % skybr)
     ccds['skyrms'] = skyrms / imobj.exptime
-    ccds['skycounts'] = skymed / imobj.exptime
-    ccds['skysb'] = skybr   # [mag/arcsec^2]
+    ccds['ccdskycounts'] = skymed / imobj.exptime
+    ccds['ccdskysb'] = skybr   # [mag/arcsec^2]
     t0= ptime('measure-sky',t0)
 
     # Does this image already have (photometric and astrometric) zeropoints computed?
@@ -1684,15 +1684,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
                  apphot.field('aperture_sum_err').data.astype(np.float32))
 
     # Add to the zeropoints table
-    ccds['raoff']  = raoff
-    ccds['decoff'] = decoff
+    ccds['ccdraoff']  = raoff
+    ccds['ccddecoff'] = decoff
     ccds['rastddev']  = rastd
     ccds['decstddev'] = decstd
-    ccds['rarms']  = rarms
-    ccds['decrms'] = decrms
-    ccds['rarmeds'] = rarmeds
-    ccds['decrmeds'] = decrmeds
-    ccds['bprp'] = avg_color
+    ccds['ccdrarms']  = rarms
+    ccds['ccddecrms'] = decrms
+    ccds['ccdrarmeds'] = rarmeds
+    ccds['ccddecrmeds'] = decrmeds
+    ccds['ccdbprp'] = avg_color
     ccds['phoff'] = dzpt
     ccds['phrms'] = zptstd
     ccds['ccdzpt'] = zptmed
