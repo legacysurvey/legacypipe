@@ -1526,21 +1526,28 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         plt.suptitle('Fitted models')
         ps.savefig()
 
-        
-    phot.raoff  = (refs.ra_now  - phot.ra_fit ) * 3600. * np.cos(np.deg2rad(refs.dec_now))
-    phot.decoff = (refs.dec_now - phot.dec_fit) * 3600.
+    # Remove delta ra,dec (based on the "astrom" subset)
+    raoff, decoff = radec_offset(refs.ra_now[refs.astrom], refs.dec_now[refs.astrom],
+                                 phot.ra_fit[refs.astrom], refs.dec_fit[refs.astrom])
+
+    # Apply that correction to ra_fit, dec_fit
+    phot.ra_fit  += raoff
+    phot.dec_fit += decoff
+
+    phot.raoff  = 3600. * wrap_delta_ra(refs.ra_now, phot.ra_fit) *
+        np.cos(np.deg2rad(refs.dec_now))
+    phot.decoff = 3600. * (refs.dec_now - phot.dec_fit)
 
     dra  = phot.raoff [refs.astrom]
     ddec = phot.decoff[refs.astrom]
-
-    raoff  = np.median(dra)
-    decoff = np.median(ddec)
     rastd  = np.std(dra)
     decstd = np.std(ddec)
     ra_clip, _, _ = sigmaclip(dra, low=3., high=3.)
     rarms = getrms(ra_clip)
     dec_clip, _, _ = sigmaclip(ddec, low=3., high=3.)
     decrms = getrms(dec_clip)
+    rarmeds  = np.sqrt(np.median(dra **2))
+    decrmeds = np.sqrt(np.median(ddec**2))
 
     bp = refs.phot_bp_mean_mag[refs.astrom]
     rp = refs.phot_rp_mean_mag[refs.astrom]
@@ -1549,9 +1556,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     avg_color = np.median(bprp)
     print('Median Gaia BP-RP mag of astrometric calibrators (%i/%i good): %.3f' %
           (len(bprp), len(ok), avg_color))
-
-    rarmeds = np.sqrt(np.median(dra**2))
-    decrmeds = np.sqrt(np.median(ddec**2))
 
     # For astrom, since we have Gaia everywhere, count the number
     # that pass the sigma-clip, ie, the number of stars that
@@ -1625,6 +1629,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         kept[:] = False
         nphotom_used = 0
 
+    # reduce to float32
     for c in ['x_ref','y_ref','x_fit','y_fit','flux','raoff','decoff', 'psfmag',
               'dflux','dx','dy']:
         phot.set(c, phot.get(c).astype(np.float32))
@@ -1715,6 +1720,22 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         t0= ptime('made-plots',t0)
     return ccds, phot
 
+def wrap_delta_ra(r1, r2):
+    dra = r1 - r2
+    # handle RA wrap
+    dra += -360*(dra >  180)
+    dra += +360*(dra < -180)
+    return dra
+
+def radec_offset(r1, d1, r2, d2):
+    # Remove a shift
+    dra = wrap_delta_ra(r1, r2)
+    dra  = np.median(dra)
+    ddec = np.median(d1 - d2)
+    return dra,ddec
+
+## we're passed in a subimage -- starting at (ccd_x0, ccd_y0).
+## the "wcs" applies to the subimage.
 def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
                         psf, ccd_x0, ccd_y0, Rfit=10, ps=None):
     import tractor
