@@ -884,6 +884,10 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         self.do_solve_field = True
         self.do_lacosmic = True
 
+    # Options are None, "rotate", "shear"
+    def cd_transform_type(self):
+        return 'shear'
+
     def get_extension_list(self, debug=False):
         return [0]
     def compute_filenames(self):

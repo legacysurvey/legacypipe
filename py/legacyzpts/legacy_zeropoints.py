@@ -10,6 +10,7 @@ import sys
 
 import numpy as np
 from scipy.stats import sigmaclip
+from scipy.optimize import minimize
 
 import fitsio
 from astropy.table import Table, vstack
@@ -115,6 +116,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('ccdzpt', 'f4'),
         ('ccdraoff',  'f4'),
         ('ccddecoff', 'f4'),
+        ('ccdshear', '4f4'),
         ('ccdrarms',  'f4'),
         ('ccddecrms', 'f4'),
         ('ccdrarmeds',  'f4'),
@@ -1526,6 +1528,23 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         plt.suptitle('Fitted models')
         ps.savefig()
 
+    fit_type = imobj.cd_transform_type()
+    if fit_type == 'rotate':
+        print('cd_transform_type = "rotate" - not implemented!')
+        assert(False)
+    elif fit_type == 'shear':
+        # fit on only the "refs.astrom" subset...
+        S = minimize(cd_shear_distance, np.array([1., 0., 0., 1.]),
+                     args=(wcs, x0, y0, phot[refs.astrom], refs[refs.astrom]))
+        print(S)
+        S = S.x
+        ccds['ccdshear'] = S
+        print('CD matrix shear: [%.6f, %.6f, %.6f, %.6f]' % S)
+
+        ra,dec = cd_shear_radec(S, wcs, x0, y0, phot)
+        phot.ra_fit  = ra
+        phot.dec_fit = dec
+
     # Remove delta ra,dec (based on the "astrom" subset)
     raoff, decoff = radec_offset(refs.ra_now[refs.astrom], refs.dec_now[refs.astrom],
                                  phot.ra_fit[refs.astrom], refs.dec_fit[refs.astrom])
@@ -1720,6 +1739,18 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         t0= ptime('made-plots',t0)
     return ccds, phot
 
+# for fitting the CD matrix transformation
+#def cd_rotate_radec(theta, )
+
+def cd_shear_radec(S, wcs, x0, y0, phot):
+    # here we're assuming that "wcs" is a Sip object...
+    mywcs = Sip(wcs)
+    cd = mywcs.wcstan.cd
+    cd = S.reshape((2,2)) @ cd
+    mywcs.wcstan.cd = cd
+    ra,dec = mywcs.pixelxy2radec(phot.x_fit - x0 + 1, phot.y_fit - y0 + 1)
+    return ra,dec
+
 def wrap_delta_ra(r1, r2):
     dra = r1 - r2
     # handle RA wrap
@@ -1733,6 +1764,13 @@ def radec_offset(r1, d1, r2, d2):
     dra  = np.median(dra)
     ddec = np.median(d1 - d2)
     return dra,ddec
+
+def cd_shear_distance(S, wcs, x0, y0, phot, refs):
+    ra,dec = cd_shear_radec(S, wcs, x0, y0, phot)
+    dra,ddec = radec_offset(refs.ra_now, refs.dec_now, ra, dec)
+    dists = np.array([arcsec_between(r1,d1,r2,d2) for r1,d1,r2,d2 in
+                      zip(ra + dra, dec + ddec, refs.ra_now, refs.dec_now)])
+    return np.median(dists)
 
 ## we're passed in a subimage -- starting at (ccd_x0, ccd_y0).
 ## the "wcs" applies to the subimage.

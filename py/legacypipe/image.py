@@ -221,6 +221,12 @@ class LegacySurveyImage(object):
     def set_ccdzpt(self, ccdzpt):
         self.ccdzpt = ccdzpt
 
+    # called from legacy_zeropoints: should we fit a transformation to the image
+    # header WCS's CD matrix?
+    # Options are None, "rotate", "shear"
+    def cd_transform_type(self):
+        return None
+
     # For pickling
     def __getstate__(self):
         # Can't pickle our cached _fits item.
