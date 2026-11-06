@@ -169,25 +169,6 @@ def prep_survey_table(T, camera=None, bad_expid=None):
         'crpix2', 'skyrms', 'sig1', 'yshift',
     ]
 
-    # Rename
-    rename_keys= [#('zpt','ccdzpt'),
-                  #('zptavg','zpt'),
-                  #('raoff','ccdraoff'),
-                  #('decoff','ccddecoff'),
-                  #('skycounts', 'ccdskycounts'),
-                  #('skysb', 'ccdskysb'),
-                  #('rarms',  'ccdrarms'),
-                  #('decrms', 'ccddecrms'),
-                  #('rarmeds',  'ccdrarmeds'),
-                  #('decrmeds', 'ccddecrmeds'),
-                  #('bprp', 'ccdbprp'),
-                  #('phrms', 'ccdphrms'),
-                  #('phrmsavg', 'phrms'),
-                  #('nstars_astrom','ccdnastrom'),
-                  #('nstars_photom','ccdnphotom'),
-                  #('nstars_photom_used','ccdnphotom_used')]
-    for old,new in rename_keys:
-        T.rename(old,new)
     # Delete
     del_keys= list( set(T.get_columns()).difference(set(need_keys)) )
     for key in del_keys:
