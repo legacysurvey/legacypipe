@@ -630,6 +630,17 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if os.path.exists(self.scamp_fn):
             # Load Scamp WCS
             self.scamp_wcs = self.read_scamp_wcs(hdr=hdr)
+            # Apply ccdraoff, ccddecoff
+            if self.scamp_wcs is not None:
+                # Correction: ccd ra,dec offsets from zeropoints/CCDs file
+                dra,ddec = self.dradec
+                print('Correcting CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
+                    dra *3600/self.pixscale,
+                    ddec*3600/self.pixscale))
+                r,d = self.scamp_wcs.get_crval()
+                self.scamp_wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+        else:
+            print('scamp_fn does not exist')
         if self.scamp_wcs is not None:
             return self.scamp_wcs
 
@@ -798,6 +809,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             use_lacosmic = self.do_lacosmic
         if use_lacosmic:
             if not os.path.exists(self.lacosmic_fn):
+                print('lacosmic calib file not found:', self.lacosmic_fn, '; re-running')
                 self.run_lacosmic()
             slc = kwargs.pop('slc', None)
             if slc is not None:
