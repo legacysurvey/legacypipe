@@ -18,7 +18,9 @@ from astropy.table import Table, vstack
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.util import Sip
 from astrometry.libkd.spherematch import match_radec
+from astrometry.util.starutil_numpy import arcsec_between
 
 import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
@@ -164,7 +166,7 @@ def prep_survey_table(T, camera=None, bad_expid=None):
         'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
         'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
         'filter', 'exptime', 'camera', 'width', 'height', 'propid',
-        'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff',
+        'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff', 'ccdshear',
         'ccdrarms', 'ccddecrms', 'ccdrarmeds', 'ccddecrmeds', 'ccdbprp',
         'ccdskycounts', 'phrms', 'ccdphrms',
         'cd1_1', 'cd2_2', 'cd1_2', 'cd2_1', 'crval1', 'crval2', 'crpix1',
@@ -1539,7 +1541,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         print(S)
         S = S.x
         ccds['ccdshear'] = S
-        print('CD matrix shear: [%.6f, %.6f, %.6f, %.6f]' % S)
+        print('CD matrix shear: [%.6f, %.6f, %.6f, %.6f]' % (S[0],S[1],S[2],S[3]))
 
         ra,dec = cd_shear_radec(S, wcs, x0, y0, phot)
         phot.ra_fit  = ra
@@ -1547,14 +1549,14 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
 
     # Remove delta ra,dec (based on the "astrom" subset)
     raoff, decoff = radec_offset(refs.ra_now[refs.astrom], refs.dec_now[refs.astrom],
-                                 phot.ra_fit[refs.astrom], refs.dec_fit[refs.astrom])
+                                 phot.ra_fit[refs.astrom], phot.dec_fit[refs.astrom])
 
     # Apply that correction to ra_fit, dec_fit
     phot.ra_fit  += raoff
     phot.dec_fit += decoff
 
-    phot.raoff  = 3600. * wrap_delta_ra(refs.ra_now, phot.ra_fit) *
-        np.cos(np.deg2rad(refs.dec_now))
+    phot.raoff  = (3600. * wrap_delta_ra(refs.ra_now, phot.ra_fit) *
+        np.cos(np.deg2rad(refs.dec_now)))
     phot.decoff = 3600. * (refs.dec_now - phot.dec_fit)
 
     dra  = phot.raoff [refs.astrom]
@@ -1745,9 +1747,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
 def cd_shear_radec(S, wcs, x0, y0, phot):
     # here we're assuming that "wcs" is a Sip object...
     mywcs = Sip(wcs)
-    cd = mywcs.wcstan.cd
+    cd = np.array(mywcs.wcstan.cd).reshape((2,2))
     cd = S.reshape((2,2)) @ cd
-    mywcs.wcstan.cd = cd
+    mywcs.wcstan.cd = cd.ravel()
     ra,dec = mywcs.pixelxy2radec(phot.x_fit - x0 + 1, phot.y_fit - y0 + 1)
     return ra,dec
 
