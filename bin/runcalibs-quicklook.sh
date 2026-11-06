@@ -60,21 +60,12 @@ echo "Logging to $log"
 export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 export PYTHONPATH=$LEGACYPIPE_DIR:${PYTHONPATH}
 
-python -m pdb $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
---       --verbose \
+python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
     --outdir ${outdir} \
-    $image
-
-
-# python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
-#        --verbose \
-# 	--camera ${camera} \
-#     --survey-dir ${LEGACY_SURVEY_DIR} \
-#     --outdir ${outdir} \
-#     $image \
-#     >> "$log" 2>&1
+    $image \
+    >> "$log" 2>&1
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!

@@ -1166,20 +1166,11 @@ class LegacySurveyImage(object):
             x = w//2
         if y is None:
             y = h//2
-        print('galaxy target pixel position:', x, y)
         pos = tim.wcs.pixelToPosition(x, y)
         gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
         mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
-        print('tim:', tim)
-        print('galaxy:', gal)
-        print('mm:', mm)
         wcs = tim.getWcs()
-        print('wcs:', wcs)
-        px,py = wcs.positionToPixel(gal.pos)
-        print('galaxy position in pixels:', px, py)
-        print('tim image center:', x, y)
-        print('wcs x0,y0:', wcs.x0, wcs.y0)
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
         #galmod = np.maximum(0, galmod)
         #galmod /= galmod.sum()
