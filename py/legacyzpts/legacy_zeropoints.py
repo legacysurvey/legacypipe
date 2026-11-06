@@ -106,9 +106,9 @@ def _ccds_table(camera='decam', overrides=None):
         ('ccdskycounts', 'f4'),
         ('skyrms', 'f4'),
         ('sig1', 'f4'),
-        ('nstars_photom', 'i2'),
-        ('nstars_photom_used', 'i2'),
-        ('nstars_astrom', 'i2'),
+        ('ccdnphotom', 'i2'),
+        ('ccdnphotom_used', 'i2'),
+        ('ccdnastrom', 'i2'),
         ('phoff', 'f4'),
         ('ccdphrms', 'f4'),
         ('phrms', 'f4'),
@@ -183,9 +183,9 @@ def prep_survey_table(T, camera=None, bad_expid=None):
                   #('bprp', 'ccdbprp'),
                   #('phrms', 'ccdphrms'),
                   #('phrmsavg', 'phrms'),
-                  ('nstars_astrom','ccdnastrom'),
-                  ('nstars_photom','ccdnphotom'),
-                  ('nstars_photom_used','ccdnphotom_used')]
+                  #('nstars_astrom','ccdnastrom'),
+                  #('nstars_photom','ccdnphotom'),
+                  #('nstars_photom_used','ccdnphotom_used')]
     for old,new in rename_keys:
         T.rename(old,new)
     # Delete
@@ -1696,9 +1696,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     ccds['phoff'] = dzpt
     ccds['ccdphrms'] = zptstd
     ccds['ccdzpt'] = zptmed
-    ccds['nstars_photom'] = nphotom
-    ccds['nstars_astrom'] = nastrom
-    ccds['nstars_photom_used'] = nphotom_used
+    ccds['ccdnphotom'] = nphotom
+    ccds['ccdnastrom'] = nastrom
+    ccds['ccdnphotom_used'] = nphotom_used
     # .ra,.dec = Gaia else PS1
     phot.ra  = phot.ra_gaia
     phot.dec = phot.dec_gaia
