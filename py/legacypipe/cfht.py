@@ -3,6 +3,7 @@ import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
+from legacypipe.utils import get_data_file
 
 '''
 Some top-level instructions for handling CFHT data.
@@ -402,6 +403,16 @@ class MegaPrimeElixirImage(MegaPrimeImage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        survey = args[0]
+        ccd = args[1]
+
+        self.ccdshear = None
+        if ccd is not None:
+            self.ccdshear = ccd.ccdshear.reshape((2,2))
+            print('CCD shear:', self.ccdshear)
+            if np.all(self.ccdshear == 0.):
+                self.ccdshear = None
+
         self.zp0.update(
             # HACK M4112
             #M4112 = 24.28,
@@ -624,6 +635,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         #    print('Warning: Scamp header', self.scamp_fn, 'does not exist, using default WCS')
 
     def get_wcs(self, hdr=None):
+        from astrometry.util.util import Tan, Sip
         if self.scamp_wcs is not None:
             return self.scamp_wcs
         # Look for Scamp "head" file
@@ -647,10 +659,39 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if self.do_solve_field:
             if not os.path.exists(self.wcs_initial_fn):
                 self.run_solve_field()
-            from astrometry.util.util import Sip
             return Sip(self.wcs_initial_fn)
 
-        return super().get_wcs(hdr=hdr)
+        # Read image header WCS (for CRVAL) + median SIP headers, then apply shift + shear
+        if hdr is None:
+            hdr = self.read_image_header()
+        tan = Tan(hdr)
+        #print('Image TAN header:', tan)
+        medfn = get_data_file('config', 'cfht-wcs',
+                              'cfht-median-wcs-o%s.fits' % self.ccdname.replace('CCD', ''))
+        med = Sip(medfn)
+        med.set_crval(tan.crval)
+        #print('Median SIP header + CRVAL:', med)
+        # must set these to zero before ensure_inverse_polynomials()!
+        med.ap_order = 0
+        med.bp_order = 0
+        med.ensure_inverse_polynomials()
+
+        # Apply raoff,decoff
+        dra,ddec = self.dradec
+        print('Correcting CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
+            dra *3600/self.pixscale,
+            ddec*3600/self.pixscale))
+        r,d = med.get_crval()
+        med.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+
+        if self.ccdshear is not None:
+            print('Applying CD matrix shear:', self.ccdshear)
+            cd = med.get_cd()
+            cd = np.array(cd).reshape((2,2))
+            cd = self.ccdshear @ cd
+            med.set_cd(cd.ravel())
+
+        return med
 
     def run_solve_field(self):
         from legacypipe.utils import get_data_file
@@ -893,7 +934,8 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         #     # made up; = g
         #     M4376=0.17,
         #     )
-        self.do_solve_field = True
+        #self.do_solve_field = True
+        self.do_solve_field = False
         self.do_lacosmic = True
 
     # Options are None, "rotate", "shear"
