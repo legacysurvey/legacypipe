@@ -526,7 +526,8 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    NB_E = (0, 6. * rgb_stretch_factor),
                    # CFHT
                    CaHK = (2, 6.0 * rgb_stretch_factor),
-                   M4376 = (2, 6.0 * rgb_stretch_factor),
+                   M4376 = (1, 6.0 * rgb_stretch_factor),
+                   M4112 = (2, 6.0 * rgb_stretch_factor),
                    )
     # SUPRIME
     rgbscales.update({
@@ -642,15 +643,43 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 rgb[:,:,2] += bf*v
         return rgb
 
-    elif bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
-        print('sdss_rgb: IBIS 5-band color scheme')
+    elif ((bands == ['M411', 'M438', 'M464', 'M490', 'M517']) or
+          (bands == ['M4112', 'M4376', 'M464', 'M490', 'M517'])):
+        print('sdss_rgb: IBIS 5-band color scheme, or IBIS/CFHT mix')
 
         rgbvec = {
-            'M411': (0.0, 0.0, 0.6),
-            'M438': (0.0, 0.2, 0.4),
-            'M464': (0.0, 0.6, 0.0),
-            'M490': (0.4, 0.2, 0.0),
-            'M517': (0.6, 0.0, 0.0),
+            'M411' : (0.0, 0.0, 0.6),
+            'M4112': (0.0, 0.0, 0.6),
+            'M438' : (0.0, 0.2, 0.4),
+            'M4376': (0.0, 0.2, 0.4),
+            'M464' : (0.0, 0.6, 0.0),
+            'M490' : (0.4, 0.2, 0.0),
+            'M517' : (0.6, 0.0, 0.0),
+        }
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+        return rgb
+
+    elif bands == ['M4112', 'M4376']:
+        print('sdss_rgb: CFHT MB1/MB2 color scheme')
+
+        rgbvec = {
+            'M4112': (0.0, 0.5, 1.0),
+            'M4376': (1.0, 0.5, 0.0),
         }
         for img,band in zip(imgs, bands):
             _,scale = rgbscales[band]
@@ -751,7 +780,9 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
         bands[4] == 'I-A-L527'):
         return sdss_rgb(imgs, bands)
 
-    if len(bands) == 5 and bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
+    # UGHHH
+    if len(bands) == 5 and ((bands == ['M411', 'M438', 'M464', 'M490', 'M517']) or
+                            (bands == ['M4112', 'M4376', 'M464', 'M490', 'M517'])):
         return sdss_rgb(imgs, bands)
 
     if len(bands) == 5:
