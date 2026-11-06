@@ -112,7 +112,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('phoff', 'f4'),
         ('phrms', 'f4'),
         ('phrmsavg', 'f4'),
-        ('zpt', 'f4'),
+        ('ccdzpt', 'f4'),
         ('raoff',  'f4'),
         ('decoff', 'f4'),
         ('rarms',  'f4'),
@@ -153,24 +153,24 @@ def _stars_table(nstars=1):
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
-def cols_for_survey_table():
-    """Return list of -survey.fits table colums
-    """
-    return ['airmass', 'ha', 'ccdskysb', 'plver', 'procdate', 'plprocid',
-     'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
-     'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
-     'filter', 'exptime', 'camera', 'width', 'height', 'propid',
-     'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff',
-     'ccdrarms', 'ccddecrms', 'ccdrarmeds', 'ccddecrmeds', 'ccdbprp',
-     'ccdskycounts', 'phrms', 'ccdphrms',
-     'cd1_1', 'cd2_2', 'cd1_2', 'cd2_1', 'crval1', 'crval2', 'crpix1',
-     'crpix2', 'skyrms', 'sig1', 'yshift']
-
 def prep_survey_table(T, camera=None, bad_expid=None):
     assert(camera in CAMERAS)
-    need_keys = cols_for_survey_table()
+
+    ## List of columns for the survey-ccds table.
+    need_keys = [
+        'airmass', 'ha', 'ccdskysb', 'plver', 'procdate', 'plprocid',
+        'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
+        'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
+        'filter', 'exptime', 'camera', 'width', 'height', 'propid',
+        'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff',
+        'ccdrarms', 'ccddecrms', 'ccdrarmeds', 'ccddecrmeds', 'ccdbprp',
+        'ccdskycounts', 'phrms', 'ccdphrms',
+        'cd1_1', 'cd2_2', 'cd1_2', 'cd2_1', 'crval1', 'crval2', 'crpix1',
+        'crpix2', 'skyrms', 'sig1', 'yshift',
+    ]
+
     # Rename
-    rename_keys= [('zpt','ccdzpt'),
+    rename_keys= [#('zpt','ccdzpt'),
                   ('zptavg','zpt'),
                   ('raoff','ccdraoff'),
                   ('decoff','ccddecoff'),
@@ -253,7 +253,7 @@ def measure_image(img_fn, mp, image_dir='images',
         ccds = _ccds_table(camera)
         ccds['image_filename'] = img_fn
         ccds['err_message'] = 'Failed CP calib, or Exptime=0'
-        ccds['zpt'] = 0.
+        ccds['ccdzpt'] = 0.
         set_ccd_metadata(ccds, img, primhdr, None)
         return ccds, None, img
 
@@ -428,7 +428,7 @@ def measure_image(img_fn, mp, image_dir='images',
     else:
         all_photom = None
 
-    zpts = all_ccds['zpt']
+    zpts = all_ccds['ccdzpt']
     zptgood = np.isfinite(zpts)
     if np.sum(zptgood) > 0:
         all_ccds['zptavg'] = np.median(zpts[zptgood])
@@ -630,9 +630,9 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     if np.isfinite(v):
         hdr.add_record(dict(name='DEC_BORE', value=v, comment='Boresight Dec (deg)'))
 
-    zptgood = np.isfinite(ccds['zpt'])
+    zptgood = np.isfinite(ccds['ccdzpt'])
     if np.sum(zptgood) > 0:
-        medzpt = np.median(ccds['zpt'][zptgood])
+        medzpt = np.median(ccds['ccdzpt'][zptgood])
     else:
         medzpt = 0.0
     hdr.add_record(dict(name='CCD_ZPT', value=medzpt,
@@ -1058,7 +1058,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         print('Image', imobj, ': using zeropoint %.3f' % zpt)
         zpscale = NanoMaggies.zeropointToScale(zpt)
         ccds['sig1'] /= zpscale
-        ccds['zpt'] = zpt
+        ccds['ccdzpt'] = zpt
         return ccds, None
 
     # Load Gaia & photometric calibrator catalogues
@@ -1695,7 +1695,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     ccds['bprp'] = avg_color
     ccds['phoff'] = dzpt
     ccds['phrms'] = zptstd
-    ccds['zpt'] = zptmed
+    ccds['ccdzpt'] = zptmed
     ccds['nstars_photom'] = nphotom
     ccds['nstars_astrom'] = nastrom
     ccds['nstars_photom_used'] = nphotom_used
@@ -1730,7 +1730,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     # Plots for comparing to Arjuns zeropoints*.ps
     verboseplots = False
     if verboseplots:
-        imobj.make_plots(phot,dmag,ccds['zpt'],transp)
+        imobj.make_plots(phot,dmag,ccds['ccdzpt'],transp)
         t0= ptime('made-plots',t0)
     return ccds, phot
 
