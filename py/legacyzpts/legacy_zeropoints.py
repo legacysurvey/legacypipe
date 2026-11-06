@@ -110,7 +110,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('nstars_photom_used', 'i2'),
         ('nstars_astrom', 'i2'),
         ('phoff', 'f4'),
-        ('phrms', 'f4'),
+        ('ccdphrms', 'f4'),
         ('phrmsavg', 'f4'),
         ('ccdzpt', 'f4'),
         ('ccdraoff',  'f4'),
@@ -181,7 +181,7 @@ def prep_survey_table(T, camera=None, bad_expid=None):
                   #('rarmeds',  'ccdrarmeds'),
                   #('decrmeds', 'ccddecrmeds'),
                   #('bprp', 'ccdbprp'),
-                  ('phrms', 'ccdphrms'),
+                  #('phrms', 'ccdphrms'),
                   ('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
                   ('nstars_photom','ccdnphotom'),
@@ -432,8 +432,8 @@ def measure_image(img_fn, mp, image_dir='images',
     zptgood = np.isfinite(zpts)
     if np.sum(zptgood) > 0:
         all_ccds['zpt'] = np.median(zpts[zptgood])
-    phrms = all_ccds['phrms']
-    phrmsgood = np.isfinite(phrms) & (all_ccds['phrms'] > 0)
+    phrms = all_ccds['ccdphrms']
+    phrmsgood = np.isfinite(phrms) & (all_ccds['ccdphrms'] > 0)
     if np.sum(phrmsgood) > 0:
         all_ccds['phrmsavg'] = np.median(phrms[phrmsgood])
 
@@ -1694,7 +1694,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     ccds['ccddecrmeds'] = decrmeds
     ccds['ccdbprp'] = avg_color
     ccds['phoff'] = dzpt
-    ccds['phrms'] = zptstd
+    ccds['ccdphrms'] = zptstd
     ccds['ccdzpt'] = zptmed
     ccds['nstars_photom'] = nphotom
     ccds['nstars_astrom'] = nastrom
