@@ -97,7 +97,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('cd2_1', 'f4'),
         ('cd2_2', 'f4'),
         ('pixscale', 'f4'),
-        ('zptavg', 'f4'),
+        ('zpt', 'f4'),
         ('yshift', 'bool'),
         # -- CCD-level quantities --
         ('ra', 'f8'),
@@ -171,7 +171,7 @@ def prep_survey_table(T, camera=None, bad_expid=None):
 
     # Rename
     rename_keys= [#('zpt','ccdzpt'),
-                  ('zptavg','zpt'),
+                  #('zptavg','zpt'),
                   ('raoff','ccdraoff'),
                   ('decoff','ccddecoff'),
                   ('skycounts', 'ccdskycounts'),
@@ -431,7 +431,7 @@ def measure_image(img_fn, mp, image_dir='images',
     zpts = all_ccds['ccdzpt']
     zptgood = np.isfinite(zpts)
     if np.sum(zptgood) > 0:
-        all_ccds['zptavg'] = np.median(zpts[zptgood])
+        all_ccds['zpt'] = np.median(zpts[zptgood])
     phrms = all_ccds['phrms']
     phrmsgood = np.isfinite(phrms) & (all_ccds['phrms'] > 0)
     if np.sum(phrmsgood) > 0:
