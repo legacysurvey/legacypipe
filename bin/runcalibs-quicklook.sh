@@ -61,6 +61,7 @@ export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 export PYTHONPATH=$LEGACYPIPE_DIR:${PYTHONPATH}
 
 python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
+       --debug --plots \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
     --outdir ${outdir} \
