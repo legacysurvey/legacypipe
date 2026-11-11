@@ -659,26 +659,90 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if self.do_solve_field:
             if not os.path.exists(self.wcs_initial_fn):
                 self.run_solve_field()
-            return Sip(self.wcs_initial_fn)
+            #return Sip(self.wcs_initial_fn)
 
-        # Read image header WCS (for CRVAL) + median SIP headers, then apply shift + shear
-        if hdr is None:
-            hdr = self.read_image_header()
-        tan = Tan(hdr)
         #print('Image TAN header:', tan)
         medfn = get_data_file('config', 'cfht-wcs',
                               'cfht-median-wcs-o%s.fits' % self.ccdname.replace('CCD', ''))
         med = Sip(medfn)
-        med.set_crval(tan.crval)
-        #print('Median SIP header + CRVAL:', med)
+        if self.do_solve_field:
+            # Both the Astrometry.net wcs-initial and the median SIP solution have crpix-center,
+            # so swap in the wcs-initial CRVAL and CD
+            wcs_init = Sip(self.wcs_initial_fn)
+            med.set_crval(wcs_init.wcstan.crval)
+            med.set_cd(wcs_init.wcstan.cd)
 
+            # # Compute best-fit shear in the "med" WCS to match wcs-initial
+            # H,W = wcs_init.shape
+            # xgrid,ygrid = np.meshgrid(np.linspace(1, W, 6), np.linspace(1, H, 11))
+            # xgrid = xgrid.ravel()
+            # ygrid = ygrid.ravel()
+            # r,d = wcs_init.pixelxy2radec(xgrid, ygrid)
+            # 
+            # from astrometry.util.fits import fits_table
+            # from legacy_zeropoints import cd_shear_distance
+            # from scipy.optimize import minimize
+            # 
+            # fake_phot = fits_table()
+            # fake_phot.x_fit = xgrid - 1
+            # fake_phot.y_fit = ygrid - 1
+            # fake_phot.ra_now = r
+            # fake_phot.dec_now = d
+            # 
+            # print('Without shear: wcs-initial to median-SIP:', cd_shear_distance(np.zeros(4), med, 0., 0., fake_phot, fake_phot))
+            # 
+            # S = minimize(cd_shear_distance, np.array([0., 0., 0., 0.]),
+            #              args=(med, 0., 0., fake_phot, fake_phot))
+            # print(S)
+            # S = S.x
+            # 
+            # print('With shear: wcs-initial to median-SIP:', cd_shear_distance(S, med, 0., 0., fake_phot, fake_phot))
+            # 
+            # # the optimizer fits on values near zero - add the identity matrix here
+            # S = S * 1e3 + np.array([1., 0., 0., 1.])
+            # 
+            # cd = np.array(med.cd).reshape((2,2))
+            # cd = S.reshape((2,2)) @ cd
+            # med.cd = cd.ravel()
+            # 
+            # print('With shear applied: wcs-initial to median-SIP:', cd_shear_distance(np.zeros(4), med, 0., 0., fake_phot, fake_phot))
+
+            #print('Median SIP header + CRVAL:', med)
+        else:
+            # Read image header WCS (for CRVAL) + median SIP headers, then apply shift + shear
+            if hdr is None:
+                hdr = self.read_image_header()
+            tan = Tan(hdr)
+            med.set_crval(tan.crval)
+            
+        # # Read solve-field WCS to get the image center RA,Dec position; shift CRVAL
+        # if self.do_solve_field:
+        #     sf_wcs = Sip(self.wcs_initial_fn)
+        #     rc,dc = sf_wcs.radec_center()
+        #     rc0,dc0 = med.radec_center()
+        #     print('Astrometry.net RA,Dec center: %.4f, %.4f' % (rc,dc))
+        #     print('Median SIP + header WCS     : %.4f, %.4f' % (rc0,dc0))
+        # 
+        #     from legacy_zeropoints import wrap_delta_ra
+        #     dra,ddec = wrap_delta_ra(rc, rc0), dc - dc0
+        #     r,d = med.get_crval()
+        #     med.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+        #     print('Correcting CRVAL (from Astrometry.net) by (%.2f, %.2f) pix in RA,Dec' % (
+        #         dra *3600/self.pixscale,
+        #         ddec*3600/self.pixscale))
+        #     rc0,dc0 = med.radec_center()
+        #     print('Median SIP + header WCS     : %.4f, %.4f' % (rc0,dc0))
+            
         # Apply raoff,decoff
         dra,ddec = self.dradec
-        print('Correcting CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
-            dra *3600/self.pixscale,
-            ddec*3600/self.pixscale))
-        r,d = med.get_crval()
-        med.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+        if dra == 0 and ddec == 0:
+            print('No RA,Dec offset to apply')
+        else:
+            print('Correcting CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
+                dra *3600/self.pixscale,
+                ddec*3600/self.pixscale))
+            r,d = med.get_crval()
+            med.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
 
         if self.ccdshear is not None:
             print('Applying CD matrix shear:', self.ccdshear)
@@ -686,6 +750,8 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             cd = np.array(cd).reshape((2,2))
             cd = self.ccdshear @ cd
             med.set_cd(cd.ravel())
+        else:
+            print('No CD matrix shear to apply')
 
         return med
 
@@ -712,6 +778,10 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             ext = 0
 
         with get_data_file('data', 'an-cfht.cfg') as configfn:
+
+            #medfn = get_data_file('config', 'cfht-wcs',
+            #                      'cfht-median-wcs-o%s.fits' % self.ccdname.replace('CCD', ''))
+
             for ds in [2, 4]:
                 args = ['--config', configfn,
                         '--downsample', ds,
@@ -724,8 +794,10 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                         '--no-plots',
                         '--no-remove-lines',
                         '--continue',
-                        '--crpix-x', hdr['CRPIX1'],
-                        '--crpix-y', hdr['CRPIX2'],
+                        #'--crpix-x', hdr['CRPIX1'],
+                        #'--crpix-y', hdr['CRPIX2'],
+                        #'--predistort', medfn,
+                        '--crpix-center',
                         '--new-fits', 'none',
                         '--temp-axy',
                         '--solved', 'none',
@@ -930,8 +1002,8 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         #     # made up; = g
         #     M4376=0.17,
         #     )
-        #self.do_solve_field = True
-        self.do_solve_field = False
+        self.do_solve_field = True
+        #self.do_solve_field = False
         self.do_lacosmic = True
 
     # Options are None, "rotate", "shear"

@@ -1235,10 +1235,12 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
                         X = np.zeros(len(phot), G.dtype)
                     X[J] = G[I]
                     phot.set(c, X)
-                # unmatched Gaia stars
+                # Keep unmatched Gaia stars
                 unmatched = np.ones(len(gaia), bool)
                 unmatched[I] = False
                 gaia.cut(unmatched)
+                # debug - get predicted mags for Gaia-only stars too
+                gaia.legacy_survey_mag = imobj.photometric_calibrator_to_observed('gaia', gaia)
                 del unmatched
 
             refs.append(phot)
@@ -1341,16 +1343,20 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         plt.imshow(fit_img, interpolation='nearest', origin='lower',
                    vmin=-2.*s1, vmax=10.*s1, cmap='gray')
         ax = plt.axis()
-        ok,x,y = wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
-        Ibright = np.argsort(gaia.phot_g_mean_mag)[:5]
+        cat = refs
+        ok,x,y = wcs.radec2pixelxy(cat.ra_now, cat.dec_now)
+        #Ibright = np.argsort(gaia.phot_g_mean_mag)[:10]
+        #Ibright = np.argsort(gaia.phot_bp_mean_mag + 100.*(gaia.phot_bp_mean_mag == 0))[:10]
+        Ibright = np.argsort(cat.legacy_survey_mag)
         plt.plot(x-1., y-1., 'o', mec='r', mfc='none')
-        plt.plot(x[Ibright]-1., y[Ibright]-1., 'o', mec='orange', ms=20, mfc='none')
+        I = Ibright[:10]
+        plt.plot(x[I]-1., y[I]-1., 'o', mec='orange', ms=20, mfc='none')
         plt.axis(ax)
-        plt.title('Before fitting Gaia sources')
+        plt.title('Before fitting Gaia/ref sources')
         ps.savefig()
 
-        Ibright = np.argsort(gaia.phot_g_mean_mag)
-        print('Brightest Gaia G:', gaia.phot_g_mean_mag[Ibright[:10]])
+        #Ibright = np.argsort(gaia.phot_g_mean_mag)
+        #print('Brightest Gaia G:', gaia.phot_g_mean_mag[Ibright[:10]])
         #bright_gaia_sourceid = gaia.gaia_sourceid
         plot_gaia_sourceid = []
         plt.clf()
@@ -1364,7 +1370,11 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
             if xc < s or yc < s or xc+s >= w or yc+s >= h:
                 # too close to edge
                 continue
-            plot_gaia_sourceid.append(gaia.gaia_sourceid[i])
+            sid = cat.gaia_sourceid[i]
+            if sid == 0:
+                # PS1-not-Gaia source
+                continue
+            plot_gaia_sourceid.append(sid)
             plt.subplot(R,C,k)
             k+=1
             plt.imshow(fit_img[yc-s:yc+s+1, xc-s:xc+s+1], interpolation='nearest', origin='lower',
@@ -1448,8 +1458,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         ps.savefig()
 
         # Cross-correlation (matching) between detected sources and Gaia sources
-        ok,gx,gy = wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
-        I = np.argsort(gaia.phot_g_mean_mag)
+        ok,gx,gy = wcs.radec2pixelxy(cat.ra_now, cat.dec_now)
+        #I = np.argsort(gaia.phot_g_mean_mag)
+        I = np.argsort(cat.legacy_survey_mag)
         gx = gx[I[:1000]] - 1.
         gy = gy[I[:1000]] - 1.
 
@@ -1536,10 +1547,12 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         assert(False)
     elif fit_type == 'shear':
         # fit on only the "refs.astrom" subset...
-        S = minimize(cd_shear_distance, np.array([1., 0., 0., 1.]),
+        S = minimize(cd_shear_distance, np.array([0., 0., 0., 0.]), #np.array([1., 0., 0., 1.]),
                      args=(wcs, x0, y0, phot[refs.astrom], refs[refs.astrom]))
         print(S)
         S = S.x
+        # the optimizer fits on values near zero - add the identity matrix here
+        S = S * 1e3 + np.array([1., 0., 0., 1.])
         ccds['ccdshear'] = S
         print('CD matrix shear: [%.6f, %.6f, %.6f, %.6f]' % (S[0],S[1],S[2],S[3]))
 
@@ -1747,9 +1760,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
 def cd_shear_radec(S, wcs, x0, y0, phot):
     # here we're assuming that "wcs" is a Sip object...
     mywcs = Sip(wcs)
+
+    cd0 = mywcs.wcstan.cd.copy()
+
     cd = np.array(mywcs.wcstan.cd).reshape((2,2))
     cd = S.reshape((2,2)) @ cd
     mywcs.wcstan.cd = cd.ravel()
+
+    cd1 = mywcs.wcstan.cd.copy()
+    #print('CD', cd0, 'S * CD', cd1)
     ra,dec = mywcs.pixelxy2radec(phot.x_fit - x0 + 1, phot.y_fit - y0 + 1)
     return ra,dec
 
@@ -1768,6 +1787,9 @@ def radec_offset(r1, d1, r2, d2):
     return dra,ddec
 
 def cd_shear_distance(S, wcs, x0, y0, phot, refs):
+    # the optimizer fits on values near zero - add the identity matrix here
+    S = S * 1e3 + np.array([1., 0., 0., 1.])
+    #print('S', S)
     ra,dec = cd_shear_radec(S, wcs, x0, y0, phot)
     dra,ddec = radec_offset(refs.ra_now, refs.dec_now, ra, dec)
     dists = np.array([arcsec_between(r1,d1,r2,d2) for r1,d1,r2,d2 in
