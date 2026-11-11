@@ -1018,10 +1018,6 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
     def get_camera(self, primhdr):
         return 'quicklook'
 
-    def set_calib_filenames(self):
-        super().set_calib_filenames()
-        print('Calib filenames: sky', self.skyfn)
-        
     def fix_image_header(self, hdr):
         # these files have fine EXTNAME cards; no-op
         pass
@@ -1029,7 +1025,7 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacypipe.ps1cat import ps1_to_cfht
         return ps1_to_cfht(ps1stars, band)
-    
+
     def set_calib_filenames(self):
         super().set_calib_filenames()
         calibdir = self.survey.get_calib_dir()
@@ -1039,6 +1035,63 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-scamp.head')
         # ugh drop a directory component off these filenames (relative to superclass)
         self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir,
-                                           calname + '.wcs')
+                                           basename + '.wcs')
         self.lacosmic_fn = os.path.join(calibdir, 'lacosmic', imgdir,
                                         calname + '-cr.fits')
+
+
+class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
+    '''
+    A class for jointly dealing with the 40 chips of a MegaCam exposure.
+    '''
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=None, **kwargs):
+        print('Quicklook2: fn', image_fn, 'hdu', image_hdu)
+        if ccd is None:
+            self.ccd_num = image_hdu
+        else:
+            #print('CCD object:')
+            #ccd.about()
+            self.ccd_num = int(ccd.ccdname.replace('CCD', ''), 10)
+
+        if image_hdu is not None:
+            # Add the "o##.flt" suffix to the image filename!
+            image_fn = image_fn + 'o%02i.flt' % image_hdu
+            image_hdu = 0
+            self.hdu = 0
+
+        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
+
+    def get_extension_list(self, debug=False):
+        if self.ccd_num is None:
+            return np.arange(3)
+        return super().get_extension_list(debug=debug)
+
+    def read_image_primary_header(self, **kwargs):
+        if self.ccd_num is None:
+            im0 = MegaPrimeQuicklook2Image(self.survey, None, image_fn=self.image_filename,
+                                           image_hdu=0)
+            return im0.read_image_primary_header(**kwargs)
+        return super().read_image_primary_header(**kwargs)
+
+    def get_camera(self, primhdr):
+        return 'quicklook2'
+
+    def set_calib_filenames(self):
+        super().set_calib_filenames()
+        print('set_calib_filenames: my fn=', self.image_filename, 'hdu=', self.hdu,
+              'ccd_num=',self.ccd_num)
+
+        if self.ccd_num is not None:
+            self.skyfn = self.merged_skyfn
+            self.merged_skyfn = self.merged_skyfn.replace('o%02i-splinesky' % self.ccd_num,
+                                                          '-splinesky')
+            self.psffn = self.merged_psffn
+            self.merged_psffn = self.merged_psffn.replace('o%02i-psfex' % self.ccd_num,
+                                                          '-psfex')
+        else:
+            self.skyfn = None
+            self.psffn = None
+        print('  sky-single:', self.skyfn)
+        print('  sky-merged:', self.merged_skyfn)
+        print('  psf-single:', self.psffn)
+        print('  psf-merged:', self.merged_psffn)

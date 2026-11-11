@@ -37,7 +37,8 @@ def debug(*args):
 
 
 CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam',
-         'lsstcomcam', 'comcam', 'lsstcam', 'lsstcoadd', 'nisp', 'vis', 'quicklook']
+         'lsstcomcam', 'comcam', 'lsstcam', 'lsstcoadd', 'nisp', 'vis', 'quicklook',
+         'quicklook2']
 
 def ptime(text,t0):
     tnow=Time()

@@ -1040,6 +1040,7 @@ class LegacySurveyData(object):
         #from legacypipe.cfht   import MegaPrimeImage
         from legacypipe.cfht   import MegaPrimeElixirImage
         from legacypipe.cfht   import MegaPrimeQuicklookImage
+        from legacypipe.cfht   import MegaPrimeQuicklook2Image
         from legacypipe.hsc    import HscImage
         from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
@@ -1097,6 +1098,7 @@ class LegacySurveyData(object):
             #'megaprime': MegaPrimeImage,
             'megaprime': MegaPrimeElixirImage,
             'quicklook': MegaPrimeQuicklookImage,
+            'quicklook2': MegaPrimeQuicklook2Image,
             'hsc'    : HscImage,
             'panstarrs' : PanStarrsImage,
             'wiro'   : WiroImage,

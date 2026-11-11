@@ -49,7 +49,9 @@ class LegacySurveyImage(object):
                  camera_setup=False):
         '''
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
-        and one row of a CCDs fits_table object.
+        and one row of a CCDs fits_table object;
+        OR,
+        from a filename and HDU.
 
         You may not need to instantiate this class directly, instead using
         survey.get_image_object():
@@ -71,6 +73,16 @@ class LegacySurveyImage(object):
 
         Perhaps the most important method in this class is
         *get_tractor_image*.
+
+        legacy_zeropoints.py calls the constructor (via survey.get_image_object) with
+        args:
+            LegacySurveyImage(None, camera=camera, image_fn=image_fn, image_hdu=None)
+        in order to find calib files (sky, psf, etc),
+        and validate calib files.
+        Then it calls get_extension_list()
+
+        Then LegacySurveyImage() gets called again for each HDU, with
+        image_fn and image_hdu passed in.
 
         '''
         super().__init__()
