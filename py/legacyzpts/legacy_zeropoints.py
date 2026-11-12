@@ -855,6 +855,8 @@ def main(args=None):
         phot_ok = img.validate_version('photom', F.photomfn, 'header', img.expnum, img.plver, img.plprocid,
                                    ext=1, quiet=quiet)
 
+        print('Checking outputs: phot_ok', phot_ok, 'ann_ok', ann_ok, 'psf_ok', psf_ok,
+              'sky_ok', sky_ok)
         if ann_ok and (phot_ok or not(check_photom)) and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
             continue
@@ -902,14 +904,20 @@ def main(args=None):
             # round if so??
             F1 = outputFns(imgfn, outdir, camera, image_dir=survey.get_image_dir(),
                            debug=measureargs['debug'], first_round=True)
-            phot_ok = validate_version(F1.photomfn, 'header', img.expnum, img.plver,
+            phot_ok = img.validate_version('photom', F1.photomfn, 'header', img.expnum, img.plver,
                                        img.plprocid, ext=1, quiet=quiet)
             ann_ok = img.validate_version('ann', F1.annfn, 'table', img.expnum, img.plver,
                                           img.plprocid, quiet=quiet)
             if not (phot_ok and ann_ok):
                 # Run first round
                 print('Running first-round zeropointing!')
+                img.reinitialize(first_round=True)
                 runit(F.imgfn, F1.photomfn, F1.annfn, mp, first_round=True, **measureargs)
+            else:
+                # should we do this??
+                img.zeropointing_completed(F1.annfn, F1.photomfn, None, None, None,
+                                           first_round=True, **measureargs)
+            img.reinitialize(first_round=False)
 
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
 

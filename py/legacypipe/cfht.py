@@ -1072,10 +1072,20 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         along with the annotated header *hdr*.)
         '''
         print('zeropointing completed: first_round =', first_round)
+        if first_round:
+            # Run full-focal-plane astrometric calibration.
+            # Write wcs-final outputs
+            print('Running full-focal-plane astrometric calibration')
+            self.full_focal_plane_astrometry(photomfn)
+
+    def reinitialize(self, first_round=True):
+        #if not first_round:
+        #    assert(os.path.exists(self.wcs_final_fn))
+        pass
 
     def get_extension_list(self, debug=False):
         if self.ccd_num is None:
-            return np.arange(3)
+            return np.arange(40)
         return super().get_extension_list(debug=debug)
 
     def read_image_primary_header(self, **kwargs):
@@ -1090,8 +1100,8 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
 
     def set_calib_filenames(self):
         super().set_calib_filenames()
-        print('set_calib_filenames: my fn=', self.image_filename, 'hdu=', self.hdu,
-              'ccd_num=',self.ccd_num)
+        #print('set_calib_filenames: my fn=', self.image_filename, 'hdu=', self.hdu,
+        #      'ccd_num=',self.ccd_num)
 
         if self.ccd_num is not None:
             self.skyfn = self.merged_skyfn
@@ -1103,7 +1113,242 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         else:
             self.skyfn = None
             self.psffn = None
-        print('  sky-single:', self.skyfn)
-        print('  sky-merged:', self.merged_skyfn)
-        print('  psf-single:', self.psffn)
-        print('  psf-merged:', self.merged_psffn)
+        # print('  sky-single:', self.skyfn)
+        # print('  sky-merged:', self.merged_skyfn)
+        # print('  psf-single:', self.psffn)
+        # print('  psf-merged:', self.merged_psffn)
+        self.wcs_final_fn = self.wcs_initial_fn.replace('/wcs-initial/', '/wcs-final/')
+
+    def full_focal_plane_astrometry(self, photom_fn):
+        from astrometry.util.util import Tan, fit_sip_wcs_py
+        from astrometry.util.starutil_numpy import radectoxyz, xyztoradec, arcsec_between
+        from astrometry.util.fits import fits_table
+        from scipy.optimize import minimize
+        from scipy.interpolate import CubicSpline
+
+        hdus = self.get_extension_list()
+        print('wcs_initial', self.wcs_initial_fn)
+        print('round1 photom', photom_fn)
+
+        wcs_initial = [Tan(self.wcs_initial_fn.replace('.wcs', 'o%02i.wcs' % hdu))
+                       for hdu in hdus]
+        Nccd = len(wcs_initial)
+
+        # The boresight is between the top/bottom-centers of chips 13 and 22
+        rd13 = wcs_initial[13].radec_center()
+        rd22 = wcs_initial[22].radec_center()
+        xyz13 = radectoxyz(*rd13)[0]
+        xyz22 = radectoxyz(*rd22)[0]
+        ra_bore, dec_bore = xyztoradec((xyz13+xyz22)/2.)
+
+        P = fits_table(photom_fn)
+        P.cut(P.gaia_sourceid > 0)
+
+        chip_inds = [np.flatnonzero(P.ccdname == 'CCD%02i'%i) for i in range(Nccd)]
+
+        # TAN projection around boresight.
+        # this pixel scale and image size don't really matter
+        ps = 1./3600
+        proj = Tan(ra_bore, dec_bore, 0., 0., -ps, 0., 0., ps, 22000, 16000)
+        ok,u_ref,v_ref = proj.radec2iwc(P.ra_now, P.dec_now)
+        assert(np.all(ok))
+
+        rd = np.array([wcs.radec_center() for wcs in wcs_initial])
+        ok,u_center,v_center = proj.radec2iwc(rd[:,0], rd[:,1])
+        assert(np.all(ok))
+
+        def distort_r(c1, c3, c5, r):
+            r_dist = r + c1*r + c3*r**3 + c5*r**5
+            return r_dist
+
+        def distort_uv(c1, c3, c5, u, v):
+            # Apply radial distortion
+            r_ref = np.hypot(u, v)
+            r_dist = distort_r(c1, c3, c5, r_ref)
+            u_ref_dist = u * r_dist / r_ref
+            v_ref_dist = v * r_dist / r_ref
+            return u_ref_dist, v_ref_dist
+
+        def shear_wcs(wcs, shear):
+            shear = np.array([1., 0., 0., 1.]) + shear
+            cd = wcs.get_cd()
+            cd = np.array(cd).reshape((2,2))
+            cd = shear.reshape((2,2)) @ cd
+            wcs.cd = cd.ravel()
+
+        def ccd_uv(wcs, u0, v0, shear, x, y):
+            mywcs = Tan(wcs)
+            shear_wcs(mywcs, shear)
+            # Pixels to IWC (only depends on CRPIX, CD)
+            u,v = mywcs.pixelxy2iwc(x, y)
+            return u+u0, v+v0
+
+        def l1_dist_full(params, u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial):
+            c1,c3,c5 = params[:3]
+            params = params[3:]
+            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+            params = params[2*Nccd:]
+            cd_shears = params
+
+            u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
+            l1_total = 0.
+            for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+                s = cd_shears[i*4:(i+1)*4]
+                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s, P.x_fit[I]+1., P.y_fit[I]+1.)
+                l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
+            return l1_total
+
+        def l1_dist_radial(params, u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial, cd_shears):
+            c1,c3,c5 = params[:3]
+            params = params[3:]
+            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+            params = params[2*Nccd:]
+
+            u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
+            l1_total = 0.
+            for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+                s = cd_shears[i*4:(i+1)*4]
+                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s, P.x_fit[I]+1., P.y_fit[I]+1.)
+                l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
+            return l1_total
+
+        def l1_dist_ccd(params, u_ref, v_ref, wcs, u_c, v_c, x, y):
+            u0,v0 = params[:2]
+            shear = params[2:]
+            u,v = ccd_uv(wcs, u0 + u_c, v0 + v_c, shear, x, y)
+            return np.sum(np.abs(u_ref - u) + np.abs(v_ref - v))
+
+        def get_dudv(params):
+            c1,c3,c5 = params[:3]
+            params = params[3:]
+            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+            params = params[2*Nccd:]
+            cd_shears = params
+            u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
+            U,V = np.zeros(len(u_ref)), np.zeros(len(u_ref))
+            for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+                s = cd_shears[i*4:(i+1)*4]
+                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s, P.x_fit[I]+1., P.y_fit[I]+1.)
+                U[I] = u
+                V[I] = v
+            return U - u_ref_dist, V - v_ref_dist
+
+        # Fit u,v offsets and shears for CCDs one at a time
+        fit_u, fit_v, fit_shear = [],[],[]
+        for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+            vc = minimize(l1_dist_ccd, np.zeros(6), args=(u_ref[I], v_ref[I], wcs, u_center[i], v_center[i], P.x_fit[I]+1, P.y_fit[I]+1))
+            print(vc)
+            vc = vc.x
+            fit_u.append(vc[0])
+            fit_v.append(vc[1])
+            fit_shear.append(vc[2:])
+
+        p0 = np.zeros(3 + Nccd*6)
+        du0,dv0 = get_dudv(p0)
+        print('Median astrometric error before fitting: %.3g pix' % (np.median(np.hypot(du0, dv0) * 3600 / 0.185)))
+
+        p1 = np.hstack([0.,0.,0.] + fit_u + fit_v + fit_shear)
+        du1,dv1 = get_dudv(p1)
+        print('Median astrometric error after CCD fitting: %.3g pix' % (np.median(np.hypot(du1, dv1) * 3600 / 0.185)))
+
+        print('Fit radial function...')
+        cd_shears = p1[(3 + Nccd*2):]
+        p1b = minimize(l1_dist_radial, p1[:(3 + Nccd*2)],
+                       args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial,
+                             cd_shears))
+        print(p1b)
+        p1b = np.hstack((p1b.x, cd_shears))
+        du1b,dv1b = get_dudv(p1b)
+        print('Median astrometric error after radial distortion fitting: %.3g pix' % (np.median(np.hypot(du1b, dv1b) * 3600 / 0.185)))
+        print('Radial fit:', p1b[:3])
+
+        # Full minimization starting from p1
+        print('Full fit...')
+        #p2 = minimize(l1_dist_full, p1, args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial))
+        p2 = minimize(l1_dist_full, p1b, args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial))
+        print(p2)
+        print('Radial fit:', p2.x[:3])
+
+        du2,dv2 = get_dudv(p2.x)
+        print('Median astrometric error: %.3g pix' % (np.median(np.hypot(du2, dv2) * 3600 / 0.185)))
+        # Trim off outliers and repeat??
+        h = np.hypot(du2, dv2)
+        mx = np.percentile(h, 95)
+        Iclip = np.flatnonzero(h < mx)
+        Psub = P[Iclip]
+        print('Cutting to %i of %i stars' % (len(Psub), len(P)))
+        chip_inds_sub = [np.flatnonzero(Psub.ccdname == 'CCD%02i'%i) for i in range(Nccd)]
+        print('Second-round full fit:')
+        p3 = minimize(l1_dist_full, p2.x, args=(u_ref[Iclip], v_ref[Iclip], Psub, chip_inds_sub, u_center, v_center, wcs_initial))
+        print(p3)
+
+        du3,dv3 = get_dudv(p3.x)
+        print('Median astrometric error: %.3g pix' % (np.median(np.hypot(du3, dv3) * 3600 / 0.185)))
+
+        # Unpack params
+        params = p3.x
+        c1,c3,c5 = params[:3]
+        params = params[3:]
+        u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+        params = params[2*Nccd:]
+        cd_shears = params
+        assert(len(cd_shears) == 4 * Nccd)
+
+        # approx size of CFHT focal plane
+        rr = np.linspace(0, 0.75, 500)
+        rr_dist = distort_r(c1, c3, c5, rr)
+        undistort_r = CubicSpline(rr_dist, rr)
+
+        H,W = wcs_initial[0].shape
+        xgrid,ygrid = np.meshgrid(np.linspace(1, W, 11), np.linspace(1, H, 21))
+        xgrid = xgrid.ravel()
+        ygrid = ygrid.ravel()
+
+        def undistort_uv(u, v):
+            r_dist = np.hypot(u, v)
+            r_undist = undistort_r(r_dist)
+            u = u * r_undist / r_dist
+            v = v * r_undist / r_dist
+            return u,v
+
+        for hdu in hdus:
+            I = chip_inds_sub[hdu]
+            wcs = wcs_initial[hdu]
+            u0 = u_offs[hdu] + u_center[hdu]
+            v0 = v_offs[hdu] + v_center[hdu]
+            myshear = cd_shears[hdu*4:(hdu+1)*4]
+
+            # u,v = ccd_uv(wcs, u0, v0, myshear, Psub.x_fit[I] + 1., Psub.y_fit[I] + 1.)
+            # u,v = undistort_uv(u, v)
+            # ra,dec = proj.iwc2radec(u, v)
+
+            mywcs = Tan(wcs)
+            shear_wcs(mywcs, myshear)
+            u,v = undistort_uv(u0, v0)
+            ra0,dec0 = proj.iwc2radec(u, v)
+            mywcs.crval = ra0, dec0
+
+            u,v = ccd_uv(wcs, u0, v0, myshear, xgrid, ygrid)
+            u,v = undistort_uv(u, v)
+            ra_grid,dec_grid = proj.iwc2radec(u, v)
+
+            xyz_grid = radectoxyz(ra_grid, dec_grid)
+            xy_grid = np.vstack((xgrid, ygrid)).T
+            mysip = fit_sip_wcs_py(xyz_grid, xy_grid, None, mywcs, 5, 6)
+
+            outfn = self.wcs_final_fn.replace('.wcs', 'o%02i.wcs' % hdu)
+            hdr = fitsio.FITSHDR()
+            hdr['EXPNUM'] = self.expnum
+            hdr['CCDNAME'] = 'CCD%02i' % hdu
+            mysip.add_to_header(hdr)
+            outdir = os.path.dirname(outfn)
+            if not os.path.exists(outdir):
+                os.makedirs(outdir, exist_ok=True)
+            fitsio.write(outfn, None, header=hdr, clobber=True)
+            print('Wrote', outfn)
+
+            rsip,dsip = mysip.pixelxy2radec(Psub.x_fit[I] + 1., Psub.y_fit[I] + 1.)
+            dists = np.array([arcsec_between(*args) for args in
+                              zip(rsip, dsip, Psub.ra_now[I], Psub.dec_now[I])])
+            print('CCD%02i SIP median scatter: %.1f mas' % (hdu, 1000. * np.median(dists)))
+
