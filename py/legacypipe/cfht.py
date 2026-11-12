@@ -1125,6 +1125,8 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         from astrometry.util.fits import fits_table
         from scipy.optimize import minimize
         from scipy.interpolate import CubicSpline
+        import time
+        from functools import lru_cache
 
         hdus = self.get_extension_list()
         print('wcs_initial', self.wcs_initial_fn)
@@ -1233,6 +1235,79 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
                 V[I] = v
             return U - u_ref_dist, V - v_ref_dist
 
+
+
+        g_u_ref = None
+        g_v_ref = None
+        g_p_xfit = None
+        g_p_yfit = None
+        g_wcs_initial = None
+        g_u_center = None
+        g_v_center = None
+        g_chip_inds = None
+
+        @lru_cache
+        def cache_distort_uv_ref(c1, c3, c5):
+            # Apply radial distortion
+            u,v = g_u_ref, g_v_ref
+            r_ref = np.hypot(u, v)
+            r_dist = distort_r(c1, c3, c5, r_ref)
+            u_ref_dist = u * r_dist / r_ref
+            v_ref_dist = v * r_dist / r_ref
+            return u_ref_dist, v_ref_dist
+
+        @lru_cache
+        def cache_ccd_uv(i, u0, v0, shear):
+            wcs = g_wcs_initial[i]
+            x,y = g_p_xfit[g_chip_inds[i]] + 1., g_p_yfit[g_chip_inds[i]] + 1.
+
+            shear = np.array(shear)
+            mywcs = Tan(wcs)
+            shear_wcs(mywcs, shear)
+            # Pixels to IWC (only depends on CRPIX, CD)
+            u,v = mywcs.pixelxy2iwc(x, y)
+            return u+u0, v+v0
+
+        g_u_ref_dist = None
+        g_v_ref_dist = None
+        
+        @lru_cache
+        def cache_ccd_l1(c1,c3,c5, i, u0, v0, shear):
+            u,v = cache_ccd_uv(i, u0, v0, shear)
+            I = g_chip_inds[i]
+            l1_total = np.sum(np.abs(u - g_u_ref_dist[I]) + np.abs(v - g_v_ref_dist[I]))
+            return l1_total
+
+        def caching_l1_dist_full(params):
+            c1,c3,c5 = params[:3]
+            params = params[3:]
+            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+            params = params[2*Nccd:]
+            cd_shears = params
+
+            u_ref_dist, v_ref_dist = cache_distort_uv_ref(c1, c3, c5)
+
+            nonlocal g_u_ref_dist
+            nonlocal g_v_ref_dist
+            
+            g_u_ref_dist = u_ref_dist
+            g_v_ref_dist = v_ref_dist
+            
+            l1_total = 0.
+            for i,(wcs,I) in enumerate(zip(g_wcs_initial, g_chip_inds)):
+                s = cd_shears[i*4:(i+1)*4]
+                #u,v = cache_ccd_uv(i, u_offs[i] + g_u_center[i], v_offs[i] + g_v_center[i], tuple(s))
+                #l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
+                l1_total += cache_ccd_l1(c1, c3, c5,
+                                         i,
+                                         u_offs[i] + g_u_center[i],
+                                         v_offs[i] + g_v_center[i],
+                                         tuple(s))
+            return l1_total
+
+
+
+        
         # Fit u,v offsets and shears for CCDs one at a time
         fit_u, fit_v, fit_shear = [],[],[]
         for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
@@ -1251,23 +1326,46 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         du1,dv1 = get_dudv(p1)
         print('Median astrometric error after CCD fitting: %.3g pix' % (np.median(np.hypot(du1, dv1) * 3600 / 0.185)))
 
-        print('Fit radial function...')
-        cd_shears = p1[(3 + Nccd*2):]
-        p1b = minimize(l1_dist_radial, p1[:(3 + Nccd*2)],
-                       args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial,
-                             cd_shears))
-        print(p1b)
-        p1b = np.hstack((p1b.x, cd_shears))
-        du1b,dv1b = get_dudv(p1b)
-        print('Median astrometric error after radial distortion fitting: %.3g pix' % (np.median(np.hypot(du1b, dv1b) * 3600 / 0.185)))
-        print('Radial fit:', p1b[:3])
+        # print('Fit radial function...')
+        # cd_shears = p1[(3 + Nccd*2):]
+        # t0 = time.monotonic()
+        # p1b = minimize(l1_dist_radial, p1[:(3 + Nccd*2)],
+        #                args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial,
+        #                      cd_shears))
+        # t1 = time.monotonic()
+        # print('Fit took %.3f sec' % (t1-t0))
+        # print(p1b)
+        # p1b = np.hstack((p1b.x, cd_shears))
+        # du1b,dv1b = get_dudv(p1b)
+        # print('Median astrometric error after radial distortion fitting: %.3g pix' % (np.median(np.hypot(du1b, dv1b) * 3600 / 0.185)))
+        # print('Radial polynomial:', p1b[:3])
 
         # Full minimization starting from p1
         print('Full fit...')
         #p2 = minimize(l1_dist_full, p1, args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial))
-        p2 = minimize(l1_dist_full, p1b, args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial))
+
+        g_u_ref = u_ref
+        g_v_ref = v_ref
+        g_wcs_initial = wcs_initial
+        g_u_center = u_center
+        g_v_center = v_center
+        g_p_xfit = P.x_fit
+        g_p_yfit = P.y_fit
+        g_chip_inds = chip_inds
+
+        print('Caching full fit...')
+        t0 = time.monotonic()
+        #p2 = minimize(caching_l1_dist_full, p1b)
+        p2 = minimize(caching_l1_dist_full, p1)
+        t1 = time.monotonic()
+        print('Fit took %.3f sec' % (t1-t0))
+
+        print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
+        print('cache_ccd_uv:', cache_ccd_uv.cache_info())
+        print('cache_ccd_l1:', cache_ccd_l1.cache_info())
+
         print(p2)
-        print('Radial fit:', p2.x[:3])
+        print('Radial polynomial:', p2.x[:3])
 
         du2,dv2 = get_dudv(p2.x)
         print('Median astrometric error: %.3g pix' % (np.median(np.hypot(du2, dv2) * 3600 / 0.185)))
