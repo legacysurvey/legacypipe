@@ -209,6 +209,9 @@ class LegacySurveyImage(object):
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
 
+    def needs_two_round_zeropointing(self):
+        return False
+
     def set_calib_filenames(self):
         # Calib filenames
         calibdir = self.survey.get_calib_dir()
@@ -564,7 +567,7 @@ class LegacySurveyImage(object):
         '''
         return None
 
-    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr, **kwargs):
         '''
         Called after legacy_zeropoints has just written the "photom" and
         "annotated" files.  (The objects are passed as *ann* and *photom*,

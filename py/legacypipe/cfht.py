@@ -1061,6 +1061,18 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
 
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
 
+    def needs_two_round_zeropointing(self):
+        return True
+
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr,
+                               first_round=False, **kwargs):
+        '''
+        Called after legacy_zeropoints has just written the "photom" and
+        "annotated" files.  (The objects are passed as *ann* and *photom*,
+        along with the annotated header *hdr*.)
+        '''
+        print('zeropointing completed: first_round =', first_round)
+
     def get_extension_list(self, debug=False):
         if self.ccd_num is None:
             return np.arange(3)

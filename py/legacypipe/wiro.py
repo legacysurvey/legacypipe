@@ -247,7 +247,7 @@ class WiroImage(LegacySurveyImage):
             colorterm += coeff * gr**power
         return colorterm
 
-    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr, **kwargs):
         if not os.path.exists(self.wcs_final_fn):
             from legacypipe.utils import get_data_file
             from astrometry.util.file import trymakedirs

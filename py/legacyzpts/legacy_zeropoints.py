@@ -511,7 +511,8 @@ def run_one_ext(X):
                           gaia_photom=gaia_photom, ps=ps)
 
 class outputFns(object):
-    def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False):
+    def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False,
+                 first_round=False):
         """
         Assigns filename, makes needed dirs.
 
@@ -551,6 +552,8 @@ class outputFns(object):
                 base = base[:-len(suff)]
         if debug:
             base += '-debug'
+        if first_round:
+            base += '-round1'
         self.photomfn = os.path.join(basedir, base + '-photom.fits')
         self.annfn = os.path.join(basedir, base + '-annotated.fits')
 
@@ -656,7 +659,7 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
 
     t0 = ptime('write-results-to-fits',t0)
 
-    img.zeropointing_completed(annfn, photomfn, T, photom, hdr)
+    img.zeropointing_completed(annfn, photomfn, T, photom, hdr, **measureargs)
 
 def get_parser():
     '''return parser object, tells it what options to look for
@@ -814,8 +817,9 @@ def main(args=None):
                       debug=measureargs['debug'])
 
         img = survey.get_image_object(None, camera=measureargs['camera'],
-                                      image_fn=F.imgfn, image_hdu=None,
+                                      image_fn=imgfn, image_hdu=None,
                                       prime_cache=False, check_cache=False)
+
         if measureargs['run_psf_only']:
             skyfn = None
         else:
@@ -848,7 +852,7 @@ def main(args=None):
             print('Already finished {}'.format(skyfn))
             continue
 
-        phot_ok = validate_version(F.photomfn, 'header', img.expnum, img.plver, img.plprocid,
+        phot_ok = img.validate_version('photom', F.photomfn, 'header', img.expnum, img.plver, img.plprocid,
                                    ext=1, quiet=quiet)
 
         if ann_ok and (phot_ok or not(check_photom)) and psf_ok and sky_ok:
@@ -892,6 +896,20 @@ def main(args=None):
                     measureargs.update(bad_expid=read_bad_expid(fn))
                 else:
                     print('No bad exposure file found for camera {}'.format(camera))
+
+        if img.needs_two_round_zeropointing():
+            # check for first round photom.fits, annotated.fits outputs, only run second
+            # round if so??
+            F1 = outputFns(imgfn, outdir, camera, image_dir=survey.get_image_dir(),
+                           debug=measureargs['debug'], first_round=True)
+            phot_ok = validate_version(F1.photomfn, 'header', img.expnum, img.plver,
+                                       img.plprocid, ext=1, quiet=quiet)
+            ann_ok = img.validate_version('ann', F1.annfn, 'table', img.expnum, img.plver,
+                                          img.plprocid, quiet=quiet)
+            if not (phot_ok and ann_ok):
+                # Run first round
+                print('Running first-round zeropointing!')
+                runit(F.imgfn, F1.photomfn, F1.annfn, mp, first_round=True, **measureargs)
 
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
 
