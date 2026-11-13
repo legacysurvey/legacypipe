@@ -1128,36 +1128,100 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         import time
         from functools import lru_cache
 
-        hdus = self.get_extension_list()
-        print('wcs_initial', self.wcs_initial_fn)
-        print('round1 photom', photom_fn)
+        '''
 
+        This implements an idea from Stephen Gwyn that he used for the UNIONS
+        reductions. (Many thanks to Stephen for sharing his solution.)
+
+        The idea is to use a single polynomial distortion for the whole focal
+        plane, and to limit it to a radial distortion of the form
+
+        r -> r + c1 * r + c3 * r**3 + c5 * r**5
+
+        Meanwhile, constant and linear terms for each CCD are allowed to vary.
+
+        There is then a choice of which coordinate system to do the
+        minimization in.  I opted for neither RA,Dec nor pixels, but rather
+        something like the "intermediate world coordinates" used in the WCS
+        standard.  I probably should have called these "eta,xi" or something
+        like that, but I opted for "u,v".  These are in degrees, and are
+        centered on (0,0) being the TANgent plane projection point.
+
+        I went for minimizing the sum of L1 distances in this u,v space (to
+        handle the fact that some of the star fits may not have worked
+        correctly - there could be outliers).
+
+        The reference star RA,Dec positions are projected into u,v once at the
+        beginning, where the WCS object "proj" does that projection around
+        CRVAL to yield (u_ref, v_ref)
+
+        The distortion function is applied to (u_ref, v_ref) to yield
+        distorted (u_ref_dist, v_ref_dist) positions.
+
+        It's in that "distorted u,v" space that the L1 distance is computed.
+
+        (I *think* this is kind of how the TPV distortions work?)
+
+        Meanwhile, the pixel positions (P.x_fit+1, P.y_fit+1) get pushed
+        through a sheared CD matrix into "IWC" coordinates -- distorted u,v
+        coords.
+
+        (I say "shear", but really it's a modification of the CD matrix:
+            CD -> (Identity + S) * CD
+        )
+
+        At the start, we compute for each CCD its initial (u_center, v_center),
+        just so we're in the right ballpark. Then we also fit (u_offs, v_offs)
+        offsets for each chip, because the distortion parameters will change
+        where the chip center is, and because we want to let the offset of each
+        CCD float, along with a shear to the initiall WCS.
+
+        So, in total, we're fitting:
+        * 3 radial distortion paramaters (c1, c3, c5)
+        * 2 offset parameters per CCD (u_offs, v_offs)
+        * 4 shear parameters per CCD (cd_shears)
+
+        for a total of 243 parameters (!).
+        '''
+
+        hdus = self.get_extension_list()
+        #print('wcs_initial', self.wcs_initial_fn)
+        #print('round1 photom', photom_fn)
         wcs_initial = [Tan(self.wcs_initial_fn.replace('.wcs', 'o%02i.wcs' % hdu))
                        for hdu in hdus]
         Nccd = len(wcs_initial)
 
-        # The boresight is between the top/bottom-centers of chips 13 and 22
+        # The boresight is between the top/bottom-centers of chips 13 and 22.
+        # Use that as the center of projection / CRVAL.
         rd13 = wcs_initial[13].radec_center()
         rd22 = wcs_initial[22].radec_center()
         xyz13 = radectoxyz(*rd13)[0]
         xyz22 = radectoxyz(*rd22)[0]
         ra_bore, dec_bore = xyztoradec((xyz13+xyz22)/2.)
+        # TAN projection around boresight.
+        # this pixel scale and image size don't really matter - we only use "iwc" coords
+        ps = 1./3600
+        proj = Tan(ra_bore, dec_bore, 0., 0., -ps, 0., 0., ps, 22000, 16000)
 
+        # Pull out just the Gaia stars from the round-1 photometry results.
         P = fits_table(photom_fn)
         P.cut(P.gaia_sourceid > 0)
 
+        # Identify which stars in the photometry file lie in each chip.
+        # Here we're assuming that the CCDNAME "CCD##" corresponds to WCS file "o##.wcs".
         chip_inds = [np.flatnonzero(P.ccdname == 'CCD%02i'%i) for i in range(Nccd)]
 
-        # TAN projection around boresight.
-        # this pixel scale and image size don't really matter
-        ps = 1./3600
-        proj = Tan(ra_bore, dec_bore, 0., 0., -ps, 0., 0., ps, 22000, 16000)
+        # Project reference stars into (undistorted) u,v space.
         ok,u_ref,v_ref = proj.radec2iwc(P.ra_now, P.dec_now)
         assert(np.all(ok))
 
+        # Project CCD centers into u,v space.
         rd = np.array([wcs.radec_center() for wcs in wcs_initial])
         ok,u_center,v_center = proj.radec2iwc(rd[:,0], rd[:,1])
         assert(np.all(ok))
+
+        ###   (u_ref, v_ref) are constant for the rest of this function.
+        ###   (u_center, v_center) are also constant.
 
         def distort_r(c1, c3, c5, r):
             r_dist = r + c1*r + c3*r**3 + c5*r**5
@@ -1172,6 +1236,7 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             return u_ref_dist, v_ref_dist
 
         def shear_wcs(wcs, shear):
+            # For numerical scaling, we fit for values away from the identity matrix
             shear = np.array([1., 0., 0., 1.]) + shear
             cd = wcs.get_cd()
             cd = np.array(cd).reshape((2,2))
@@ -1185,7 +1250,9 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             u,v = mywcs.pixelxy2iwc(x, y)
             return u+u0, v+v0
 
-        def l1_dist_full(params, u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial):
+        def l1_dist_full(params, u_ref, v_ref, P, chip_inds, u_center, v_center,
+                         wcs_initial):
+            # unpack parameters...
             c1,c3,c5 = params[:3]
             params = params[3:]
             u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
@@ -1196,7 +1263,8 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             l1_total = 0.
             for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
                 s = cd_shears[i*4:(i+1)*4]
-                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s, P.x_fit[I]+1., P.y_fit[I]+1.)
+                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s,
+                             P.x_fit[I]+1., P.y_fit[I]+1.)
                 l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
             return l1_total
 
@@ -1235,6 +1303,25 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
                 V[I] = v
             return U - u_ref_dist, V - v_ref_dist
 
+        '''
+        The following variables and functions implement a caching version of
+        the l1_dist_full() function.  The observation is that the minimize()
+        function steps in all parameters, the majority of which are the
+        CCD-based parameters, and these affect only the L1 contributions from
+        that single CCD; all the L1 contributions from the other CCDs are
+        constant, so they don't need to be recompute each time.  This yields at
+        least a 10x speedup.
+
+        The caching is done via the built-in @lru_cache decorator, which keeps
+        a dict of args->results.  The args therefore must be hashable. Numpy
+        arrays are not hashable. But it turns out that all the arrays we pass
+        around are constant for the duration of the minimize() call. So we need
+        only *refer* to any arrays that are used, using an id (here, the index
+        "i"); that way, the @lru_cache dictionary will correctly record which
+        arrays are used as inputs.
+
+        But we do need to set the following "global" (g_*) variables.
+        '''
         g_u_ref = None
         g_v_ref = None
         g_p_xfit = None
