@@ -1268,20 +1268,6 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
                 l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
             return l1_total
 
-        def l1_dist_radial(params, u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial, cd_shears):
-            c1,c3,c5 = params[:3]
-            params = params[3:]
-            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
-            params = params[2*Nccd:]
-
-            u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
-            l1_total = 0.
-            for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
-                s = cd_shears[i*4:(i+1)*4]
-                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s, P.x_fit[I]+1., P.y_fit[I]+1.)
-                l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
-            return l1_total
-
         def l1_dist_ccd(params, u_ref, v_ref, wcs, u_c, v_c, x, y):
             u0,v0 = params[:2]
             shear = params[2:]
@@ -1408,20 +1394,6 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         print('Median astrometric error after CCD fitting: %.3g pix' %
               (np.median(np.hypot(du1, dv1) * 3600 / 0.185)))
 
-        print('Fit radial function...')
-        cd_shears = p1[(3 + Nccd*2):]
-        t0 = time.monotonic()
-        p1b = minimize(l1_dist_radial, p1[:(3 + Nccd*2)],
-                       args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial,
-                             cd_shears))
-        t1 = time.monotonic()
-        print('Fit took %.3f sec' % (t1-t0))
-        print(p1b)
-        p1b = np.hstack((p1b.x, cd_shears))
-        du1b,dv1b = get_dudv(p1b)
-        print('Median astrometric error after radial distortion fitting: %.3g pix' % (np.median(np.hypot(du1b, dv1b) * 3600 / 0.185)))
-        print('Radial polynomial:', p1b[:3])
-
         # Full minimization starting from p1
         #print('Full fit...')
         #p2 = minimize(l1_dist_full, p1, args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial))
@@ -1437,7 +1409,6 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
 
         print('Caching full fit...')
         t0 = time.monotonic()
-        #p2 = minimize(caching_l1_dist_full, p1b)
         p2 = minimize(caching_l1_dist_full, p1)
         t1 = time.monotonic()
         print('Fit took %.3f sec' % (t1-t0))
