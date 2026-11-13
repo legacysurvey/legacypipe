@@ -1250,30 +1250,35 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             u,v = mywcs.pixelxy2iwc(x, y)
             return u+u0, v+v0
 
-        def l1_dist_full(params, u_ref, v_ref, P, chip_inds, u_center, v_center,
-                         wcs_initial):
-            # unpack parameters...
-            c1,c3,c5 = params[:3]
-            params = params[3:]
-            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
-            params = params[2*Nccd:]
-            cd_shears = params
+        # This is the function to be minimized when we're doing the full fit.
+        # *In practice*, we use a "caching" version of this instead!  See below.
+        # def l1_dist_full(params, u_ref, v_ref, P, chip_inds, u_center, v_center,
+        #                  wcs_initial):
+        #     # unpack parameters...
+        #     c1,c3,c5 = params[:3]
+        #     params = params[3:]
+        #     u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+        #     params = params[2*Nccd:]
+        #     cd_shears = params
+        #     u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
+        #     l1_total = 0.
+        #     for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+        #         s = cd_shears[i*4:(i+1)*4]
+        #         u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s,
+        #                      P.x_fit[I]+1., P.y_fit[I]+1.)
+        #         l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
+        #     return l1_total
 
-            u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
-            l1_total = 0.
-            for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
-                s = cd_shears[i*4:(i+1)*4]
-                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s,
-                             P.x_fit[I]+1., P.y_fit[I]+1.)
-                l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
-            return l1_total
-
+        # This is the function to be minimized when fitting the u,v offset and shear for
+        # a single CCD.
         def l1_dist_ccd(params, u_ref, v_ref, wcs, u_c, v_c, x, y):
             u0,v0 = params[:2]
             shear = params[2:]
             u,v = ccd_uv(wcs, u0 + u_c, v0 + v_c, shear, x, y)
             return np.sum(np.abs(u_ref - u) + np.abs(v_ref - v))
 
+        # Returns delta-u, delta-v for a given set of parameters; used to
+        # evaluate solutions.
         def get_dudv(params):
             c1,c3,c5 = params[:3]
             params = params[3:]
@@ -1306,7 +1311,12 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         "i"); that way, the @lru_cache dictionary will correctly record which
         arrays are used as inputs.
 
-        But we do need to set the following "global" (g_*) variables.
+        Similarly, if a function depends on the value of the distorted
+        reference coordinates, (g_u_ref_dist, g_v_ref_dist), then we include
+        (c1,c3,c5) in the args to indicate that the function's results depend
+        upon those values.  It's a bit sneaky.
+
+        We need to set the following "global" (g_*) variables:
         '''
         g_u_ref = None
         g_v_ref = None
@@ -1329,23 +1339,41 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             v_ref_dist = v * r_dist / r_ref
             return u_ref_dist, v_ref_dist
 
-        @lru_cache
-        def cache_ccd_uv(i, u0, v0, shear):
-            wcs = g_wcs_initial[i]
-            x,y = g_p_xfit[g_chip_inds[i]] + 1., g_p_yfit[g_chip_inds[i]] + 1.
+        # @lru_cache
+        # def cache_ccd_uv(i, u0, v0, shear):
+        #     x,y = g_p_xfit[g_chip_inds[i]] + 1., g_p_yfit[g_chip_inds[i]] + 1.
+        #     shear = np.array(shear)
+        #     wcs = g_wcs_initial[i]
+        #     mywcs = Tan(wcs)
+        #     shear_wcs(mywcs, shear)
+        #     # Pixels to IWC (only depends on CRPIX, CD)
+        #     u,v = mywcs.pixelxy2iwc(x, y)
+        #     return u+u0, v+v0
+        # 
+        # @lru_cache
+        # def cache_ccd_l1(c1,c3,c5, i, u0, v0, shear):
+        #     u,v = cache_ccd_uv(i, u0, v0, shear)
+        #     I = g_chip_inds[i]
+        #     l1_total = np.sum(np.abs(u - g_u_ref_dist[I]) + np.abs(v - g_v_ref_dist[I]))
+        #     return l1_total
 
+        @lru_cache
+        def cache_ccd_uv(i, shear):
+            x,y = g_p_xfit[g_chip_inds[i]] + 1., g_p_yfit[g_chip_inds[i]] + 1.
             shear = np.array(shear)
+            wcs = g_wcs_initial[i]
             mywcs = Tan(wcs)
             shear_wcs(mywcs, shear)
             # Pixels to IWC (only depends on CRPIX, CD)
             u,v = mywcs.pixelxy2iwc(x, y)
-            return u+u0, v+v0
+            return u, v
 
         @lru_cache
         def cache_ccd_l1(c1,c3,c5, i, u0, v0, shear):
-            u,v = cache_ccd_uv(i, u0, v0, shear)
+            u,v = cache_ccd_uv(i, shear)
             I = g_chip_inds[i]
-            l1_total = np.sum(np.abs(u - g_u_ref_dist[I]) + np.abs(v - g_v_ref_dist[I]))
+            l1_total = np.sum(np.abs(u + u0 - g_u_ref_dist[I]) +
+                              np.abs(v + v0 - g_v_ref_dist[I]))
             return l1_total
 
         def caching_l1_dist_full(params):
@@ -1398,6 +1426,8 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         #print('Full fit...')
         #p2 = minimize(l1_dist_full, p1, args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial))
 
+        print('Caching full fit...')
+        # set "globals" for the cache
         g_u_ref = u_ref
         g_v_ref = v_ref
         g_wcs_initial = wcs_initial
@@ -1407,7 +1437,6 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         g_p_yfit = P.y_fit
         g_chip_inds = chip_inds
 
-        print('Caching full fit...')
         t0 = time.monotonic()
         p2 = minimize(caching_l1_dist_full, p1)
         t1 = time.monotonic()
@@ -1434,8 +1463,28 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         print('Cutting to %i of %i stars' % (len(Psub), len(P)))
         chip_inds_sub = [np.flatnonzero(Psub.ccdname == 'CCD%02i'%i) for i in range(Nccd)]
         print('Second-round full fit:')
-        p3 = minimize(l1_dist_full, p2.x, args=(u_ref[Iclip], v_ref[Iclip], Psub, chip_inds_sub, u_center, v_center, wcs_initial))
+        g_u_ref = u_ref[Iclip]
+        g_v_ref = v_ref[Iclip]
+        g_wcs_initial = wcs_initial
+        g_u_center = u_center
+        g_v_center = v_center
+        g_p_xfit = Psub.x_fit
+        g_p_yfit = Psub.y_fit
+        g_chip_inds = chip_inds_sub
+
+        #p3 = minimize(l1_dist_full, p2.x, args=(u_ref[Iclip], v_ref[Iclip], Psub, chip_inds_sub, u_center, v_center, wcs_initial))
+        t0 = time.monotonic()
+        p3 = minimize(caching_l1_dist_full, p2.x)
+        t1 = time.monotonic()
+        print('Fit took %.3f sec' % (t1-t0))
         print(p3)
+
+        print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
+        print('cache_ccd_uv:', cache_ccd_uv.cache_info())
+        print('cache_ccd_l1:', cache_ccd_l1.cache_info())
+        cache_distort_uv_ref.cache_clear()
+        cache_ccd_uv.cache_clear()
+        cache_ccd_l1.cache_clear()
 
         du3,dv3 = get_dudv(p3.x)
         print('Median astrometric error: %.3g pix' % (np.median(np.hypot(du3, dv3) * 3600 / 0.185)))
