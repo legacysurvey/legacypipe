@@ -552,10 +552,11 @@ class outputFns(object):
                 base = base[:-len(suff)]
         if debug:
             base += '-debug'
+        infix = ''
         if first_round:
-            base += '-round1'
-        self.photomfn = os.path.join(basedir, base + '-photom.fits')
-        self.annfn = os.path.join(basedir, base + '-annotated.fits')
+            infix = '-round1'
+        self.photomfn = os.path.join(basedir, base + '-photom' + infix + '.fits')
+        self.annfn = os.path.join(basedir, base + '-annotated' + infix + '.fits')
 
 def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     tempfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
