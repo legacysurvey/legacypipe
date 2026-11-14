@@ -1085,7 +1085,7 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
                 self.run_solve_field()
         # or read the approximate WCS from the image header?
         assert(os.path.exists(self.wcs_initial_fn))
-        return Tan(self.wcs_final_fn)
+        return Sip(self.wcs_initial_fn)
 
     def needs_two_round_zeropointing(self):
         return True

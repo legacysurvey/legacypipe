@@ -763,8 +763,6 @@ def main(args=None):
     # image_list -- iterable list of image filenames
     # args -- parsed argparser objection from get_parser()
 
-    from pkg_resources import resource_filename
-
     assert(not args is None)
     assert(not image_list is None)
     t0 = tbegin = Time()
@@ -892,12 +890,14 @@ def main(args=None):
 
             if camera in ['mosaic', 'decam', '90prime']:
                 from legacyzpts.psfzpt_cuts import read_bad_expid
-                fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
-                if os.path.isfile(fn):
+                from importlib import resources
+                ref = resources.files('legacyzpts').joinpath('data', camera + '-bad_expid.txt')
+                with resources.as_file(ref) as fn:
+                    #if os.path.isfile(fn):
                     print('Reading {}'.format(fn))
                     measureargs.update(bad_expid=read_bad_expid(fn))
-                else:
-                    print('No bad exposure file found for camera {}'.format(camera))
+                    #else:
+                    #print('No bad exposure file found for camera {}'.format(camera))
 
         if img.needs_two_round_zeropointing():
             # check for first round photom.fits, annotated.fits outputs, only run second
