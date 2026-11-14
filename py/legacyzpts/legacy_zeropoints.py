@@ -345,8 +345,8 @@ def measure_image(img_fn, mp, image_dir='images',
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
-        for img in imgs:
-            fn = survey.find_file('sky-single', img=img, use_cache=False)
+        for im in imgs:
+            fn = survey.find_file('sky-single', img=im, use_cache=False)
             if fn == skyfn:
                 continue
             if os.path.isfile(fn):
@@ -364,8 +364,8 @@ def measure_image(img_fn, mp, image_dir='images',
                 raise RuntimeError('Merged psfex file did not validate!')
             # At this point the merged file exists and has been validated, so remove
             # the individual PSFEx and SE files.
-            for img in imgs:
-                fn = survey.find_file('psf-single', img=img, use_cache=False)
+            for im in imgs:
+                fn = survey.find_file('psf-single', img=im, use_cache=False)
                 if fn == psffn:
                     continue
                 if os.path.isfile(fn):
@@ -929,6 +929,7 @@ def main(args=None):
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
+    mp.close()
 
 def set_ccd_metadata(ccds, img, primhdr, hdr):
     # init_ccd():
