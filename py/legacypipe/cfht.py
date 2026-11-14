@@ -1061,6 +1061,32 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
 
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
 
+    # Options are None, "rotate", "shear"
+    def cd_transform_type(self):
+        return None
+
+    def get_wcs(self, hdr=None):
+        from astrometry.util.util import Tan, Sip
+        if os.path.exists(self.wcs_final_fn):
+            wcs = Sip(self.wcs_final_fn)
+            # Apply raoff,decoff
+            dra,ddec = self.dradec
+            if dra == 0 and ddec == 0:
+                pass
+            print('Correcting wcs-final CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
+                dra *3600/self.pixscale,
+                ddec*3600/self.pixscale))
+            r,d = wcs.get_crval()
+            wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+            return wcs
+
+        if self.do_solve_field:
+            if not os.path.exists(self.wcs_initial_fn):
+                self.run_solve_field()
+        # or read the approximate WCS from the image header?
+        assert(os.path.exists(self.wcs_initial_fn))
+        return Tan(self.wcs_final_fn)
+
     def needs_two_round_zeropointing(self):
         return True
 
@@ -1079,9 +1105,8 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             self.full_focal_plane_astrometry(photomfn)
 
     def reinitialize(self, first_round=True):
-        #if not first_round:
-        #    assert(os.path.exists(self.wcs_final_fn))
-        pass
+        if (not first_round) and (self.ccd_num is not None):
+            assert(os.path.exists(self.wcs_final_fn))
 
     def get_extension_list(self, debug=False):
         if self.ccd_num is None:
