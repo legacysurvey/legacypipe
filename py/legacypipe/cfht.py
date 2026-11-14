@@ -1037,7 +1037,7 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir,
                                            basename + '.wcs')
         self.lacosmic_fn = os.path.join(calibdir, 'lacosmic', imgdir,
-                                        calname + '-cr.fits')
+                                        basename + '-cr.fits')
 
 
 class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
