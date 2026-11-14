@@ -48,9 +48,9 @@ cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
 
 image="$1"
 
-camera=quicklook
+camera=quicklook2
 
-log=$outdir/logs/$(echo "${image}" | sed s#.flt#.log#g)
+log=$outdir/logs/$(echo "${image}" | sed s#.flt##g).log
 logdir=$(dirname $log)
 mkdir -p $logdir
 
@@ -62,11 +62,12 @@ export PYTHONPATH=$LEGACYPIPE_DIR:${PYTHONPATH}
 
 #       --debug --plots \
 python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
+       --threads 40 \
 	   --camera ${camera} \
-    --survey-dir ${LEGACY_SURVEY_DIR} \
-    --outdir ${outdir} \
-    $image \
-    >> "$log" 2>&1
+       --survey-dir ${LEGACY_SURVEY_DIR} \
+       --outdir ${outdir} \
+       $image \
+       >> "$log" 2>&1
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!
