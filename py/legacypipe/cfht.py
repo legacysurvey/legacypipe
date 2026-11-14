@@ -1339,25 +1339,7 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             v_ref_dist = v * r_dist / r_ref
             return u_ref_dist, v_ref_dist
 
-        # @lru_cache
-        # def cache_ccd_uv(i, u0, v0, shear):
-        #     x,y = g_p_xfit[g_chip_inds[i]] + 1., g_p_yfit[g_chip_inds[i]] + 1.
-        #     shear = np.array(shear)
-        #     wcs = g_wcs_initial[i]
-        #     mywcs = Tan(wcs)
-        #     shear_wcs(mywcs, shear)
-        #     # Pixels to IWC (only depends on CRPIX, CD)
-        #     u,v = mywcs.pixelxy2iwc(x, y)
-        #     return u+u0, v+v0
-        # 
-        # @lru_cache
-        # def cache_ccd_l1(c1,c3,c5, i, u0, v0, shear):
-        #     u,v = cache_ccd_uv(i, u0, v0, shear)
-        #     I = g_chip_inds[i]
-        #     l1_total = np.sum(np.abs(u - g_u_ref_dist[I]) + np.abs(v - g_v_ref_dist[I]))
-        #     return l1_total
-
-        @lru_cache
+        @lru_cache(maxsize=256)
         def cache_ccd_uv(i, shear):
             x,y = g_p_xfit[g_chip_inds[i]] + 1., g_p_yfit[g_chip_inds[i]] + 1.
             shear = np.array(shear)
@@ -1368,7 +1350,7 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             u,v = mywcs.pixelxy2iwc(x, y)
             return u, v
 
-        @lru_cache
+        @lru_cache(maxsize=256)
         def cache_ccd_l1(c1,c3,c5, i, u0, v0, shear):
             u,v = cache_ccd_uv(i, shear)
             I = g_chip_inds[i]
@@ -1406,7 +1388,7 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             vc = minimize(l1_dist_ccd, np.zeros(6),
                           args=(u_ref[I], v_ref[I], wcs, u_center[i], v_center[i],
                                 P.x_fit[I]+1, P.y_fit[I]+1))
-            print(vc)
+            #print(vc)
             vc = vc.x
             fit_u.append(vc[0])
             fit_v.append(vc[1])
@@ -1424,9 +1406,10 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
 
         # Full minimization starting from p1
         #print('Full fit...')
-        #p2 = minimize(l1_dist_full, p1, args=(u_ref, v_ref, P, chip_inds, u_center, v_center, wcs_initial))
+        #p2 = minimize(l1_dist_full, p1, args=(u_ref, v_ref, P, chip_inds,
+        #         u_center, v_center, wcs_initial))
 
-        print('Caching full fit...')
+        print('Full fit (caching version)...')
         # set "globals" for the cache
         g_u_ref = u_ref
         g_v_ref = v_ref
@@ -1441,21 +1424,19 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         p2 = minimize(caching_l1_dist_full, p1)
         t1 = time.monotonic()
         print('Fit took %.3f sec' % (t1-t0))
-
-        print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
-        print('cache_ccd_uv:', cache_ccd_uv.cache_info())
-        print('cache_ccd_l1:', cache_ccd_l1.cache_info())
-
+        # print(p2)
+        # print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
+        # print('cache_ccd_uv:', cache_ccd_uv.cache_info())
+        # print('cache_ccd_l1:', cache_ccd_l1.cache_info())
         cache_distort_uv_ref.cache_clear()
         cache_ccd_uv.cache_clear()
         cache_ccd_l1.cache_clear()
-
-        print(p2)
         print('Radial polynomial:', p2.x[:3])
 
         du2,dv2 = get_dudv(p2.x)
         print('Median astrometric error: %.3g pix' % (np.median(np.hypot(du2, dv2) * 3600 / 0.185)))
-        # Trim off outliers and repeat??
+
+        # Trim off outliers and repeat
         h = np.hypot(du2, dv2)
         mx = np.percentile(h, 95)
         Iclip = np.flatnonzero(h < mx)
@@ -1477,11 +1458,10 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         p3 = minimize(caching_l1_dist_full, p2.x)
         t1 = time.monotonic()
         print('Fit took %.3f sec' % (t1-t0))
-        print(p3)
-
-        print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
-        print('cache_ccd_uv:', cache_ccd_uv.cache_info())
-        print('cache_ccd_l1:', cache_ccd_l1.cache_info())
+        # print(p3)
+        # print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
+        # print('cache_ccd_uv:', cache_ccd_uv.cache_info())
+        # print('cache_ccd_l1:', cache_ccd_l1.cache_info())
         cache_distort_uv_ref.cache_clear()
         cache_ccd_uv.cache_clear()
         cache_ccd_l1.cache_clear()
@@ -1498,15 +1478,25 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
         cd_shears = params
         assert(len(cd_shears) == 4 * Nccd)
 
+        '''
+        Now we're going to take the fitted values and convert them to SIP.
+
+        The reference point CRVAL is the original (u_center, v_center) +
+        (u_offset, v_offset), but pushed through the inverse-distortion
+        function.
+
+        For the SIP distortion terms, we take a grid in image space, push it
+        through the sheared CD and u,v offset to get to distorted u,v coords,
+        use the inverse-distortion function to get undistorted u,v, then the
+        projection matrix to go from IWC to RA,Dec -- we then fit SIP
+        coefficients for that grid of points.
+        '''
+
         # approx size of CFHT focal plane
         rr = np.linspace(0, 0.75, 500)
         rr_dist = distort_r(c1, c3, c5, rr)
+        # fit inverse radial distortion function as a spline
         undistort_r = CubicSpline(rr_dist, rr)
-
-        H,W = wcs_initial[0].shape
-        xgrid,ygrid = np.meshgrid(np.linspace(1, W, 11), np.linspace(1, H, 21))
-        xgrid = xgrid.ravel()
-        ygrid = ygrid.ravel()
 
         def undistort_uv(u, v):
             r_dist = np.hypot(u, v)
@@ -1515,6 +1505,12 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             v = v * r_undist / r_dist
             return u,v
 
+        # Create pixel grid
+        H,W = wcs_initial[0].shape
+        xgrid,ygrid = np.meshgrid(np.linspace(1, W, 11), np.linspace(1, H, 21))
+        xgrid = xgrid.ravel()
+        ygrid = ygrid.ravel()
+
         for hdu in hdus:
             I = chip_inds_sub[hdu]
             wcs = wcs_initial[hdu]
@@ -1522,24 +1518,25 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             v0 = v_offs[hdu] + v_center[hdu]
             myshear = cd_shears[hdu*4:(hdu+1)*4]
 
-            # u,v = ccd_uv(wcs, u0, v0, myshear, Psub.x_fit[I] + 1., Psub.y_fit[I] + 1.)
-            # u,v = undistort_uv(u, v)
-            # ra,dec = proj.iwc2radec(u, v)
-
             mywcs = Tan(wcs)
             shear_wcs(mywcs, myshear)
+            # set CRVAL to the undistorted u,v center + offset
             u,v = undistort_uv(u0, v0)
             ra0,dec0 = proj.iwc2radec(u, v)
             mywcs.crval = ra0, dec0
 
+            # Convert the pixel grid to RA,Dec via u,v
             u,v = ccd_uv(wcs, u0, v0, myshear, xgrid, ygrid)
             u,v = undistort_uv(u, v)
+            # (proj.iwc2radec uses the boresight CRVAL)
             ra_grid,dec_grid = proj.iwc2radec(u, v)
 
+            # Massage inputs for fit_sip_wcs_py...
             xyz_grid = radectoxyz(ra_grid, dec_grid)
             xy_grid = np.vstack((xgrid, ygrid)).T
             mysip = fit_sip_wcs_py(xyz_grid, xy_grid, None, mywcs, 5, 6)
 
+            # Write out SIP header.
             outfn = self.wcs_final_fn.replace('.wcs', 'o%02i.wcs' % hdu)
             hdr = fitsio.FITSHDR()
             hdr['EXPNUM'] = self.expnum
@@ -1549,10 +1546,10 @@ class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
             if not os.path.exists(outdir):
                 os.makedirs(outdir, exist_ok=True)
             fitsio.write(outfn, None, header=hdr, clobber=True)
-            print('Wrote', outfn)
+            # print('Wrote', outfn)
 
+            # Check that it works for our fitted X,Y coords and Gaia reference RA,Decs!
             rsip,dsip = mysip.pixelxy2radec(Psub.x_fit[I] + 1., Psub.y_fit[I] + 1.)
             dists = np.array([arcsec_between(*args) for args in
                               zip(rsip, dsip, Psub.ra_now[I], Psub.dec_now[I])])
             print('CCD%02i SIP median scatter: %.1f mas' % (hdu, 1000. * np.median(dists)))
-
