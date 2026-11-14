@@ -38,9 +38,10 @@ mkdir $TMPCACHE/config
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
 mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+#cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
+cp -r $HOME/.cache/astropy $XDG_CACHE_HOME/astropy
+#mkdir $XDG_CONFIG_HOME/astropy
+#cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
 mkdir $MPLCONFIGDIR
