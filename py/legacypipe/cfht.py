@@ -408,10 +408,11 @@ class MegaPrimeElixirImage(MegaPrimeImage):
 
         self.ccdshear = None
         if ccd is not None:
-            self.ccdshear = ccd.ccdshear.reshape((2,2))
-            print('CCD shear:', self.ccdshear)
-            if np.all(self.ccdshear == 0.):
-                self.ccdshear = None
+            if 'ccdshear' in ccd.get_columns():
+                self.ccdshear = ccd.ccdshear.reshape((2,2))
+                print('CCD shear:', self.ccdshear)
+                if np.all(self.ccdshear == 0.):
+                    self.ccdshear = None
 
         self.zp0.update(
             # HACK M4112
