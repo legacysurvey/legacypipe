@@ -518,6 +518,11 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    r2 =    (1, 3.4 * rgb_stretch_factor),
                    i2 =    (0, 3.0 * rgb_stretch_factor),
                    y  =    (0, 2.2 * rgb_stretch_factor),
+                   # HSC MBQ1:
+                   M413 = (2, 6.0 * rgb_stretch_factor),
+                   M439 = (2, 6.0 * rgb_stretch_factor),
+                   M465 = (2, 6.0 * rgb_stretch_factor),
+                   # M490
                    # WIRO
                    NB_A = (0, 6. * rgb_stretch_factor),
                    NB_B = (0, 6. * rgb_stretch_factor),
@@ -706,6 +711,32 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
         rgbscales['M464']  = (1, rgbscales['M464'][1])
         rgbscales['M490']  = (0, rgbscales['M490'][1])
 
+    elif bands == ['M413', 'M439', 'M465', 'M490']:
+        print('sdss_rgb: HSC/Niji 4 color scheme')
+        rgbvec = dict(
+            M413 = (0.,   0.,  0.75),
+            M439 = (0.,   0.5, 0.25),
+            M465 = (0.25, 0.5, 0.),
+            M490 = (0.75, 0.,  0.))
+
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+        return rgb
+
     for img,band in zip(imgs, bands):
         plane,scale = rgbscales[band]
         if mnmx is None:
@@ -790,6 +821,10 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
     # UGHHH
     if len(bands) == 5 and ((bands == ['M411', 'M438', 'M464', 'M490', 'M517']) or
                             (bands == ['M4112', 'M4376', 'M464', 'M490', 'M517'])):
+        return sdss_rgb(imgs, bands)
+
+    # HSC-Niji
+    if bands == ['M413', 'M439', 'M465', 'M490']:
         return sdss_rgb(imgs, bands)
 
     if len(bands) == 5:
