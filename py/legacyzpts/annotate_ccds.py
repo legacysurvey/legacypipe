@@ -132,7 +132,7 @@ def annotate_one_ccd(X):
     try:
         tim = im.get_tractor_image(**kwargs)
     except:
-        print('Failed to get_tractor_image')
+        print('Failed to get_tractor_image - exception:')
         import traceback
         traceback.print_exc()
         if carryOn:

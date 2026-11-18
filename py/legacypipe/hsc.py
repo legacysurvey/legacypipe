@@ -37,6 +37,11 @@ class HscImage(LegacySurveyImage):
             i2 = 25.149,
             z = 24.875,
             y = 23.712,
+            # HSC-Niji MBQ1 -- THESE ARE MADE UP
+            M413 = 25.00,
+            M439 = 25.00,
+            M465 = 25.00,
+            M490 = 25.00,
         )
         self.k_ext = dict(g = 0.17,
                           r = 0.10,
@@ -45,7 +50,12 @@ class HscImage(LegacySurveyImage):
                           i2 = 0.08,
                           z = 0.06,
                           y = 0.058,
-                          )
+                          # from IBIS - from Arjun 2024-10-29
+                          M413 = 0.333,
+                          M439 = 0.273,
+                          M465 = 0.223,
+                          M490 = 0.197,
+        )
 
         # Sky has already been calibrated out, and Psf is included in the CALEXP file,
         # so no external calib files!
@@ -58,6 +68,10 @@ class HscImage(LegacySurveyImage):
         self.old_merged_psffns = []
         self.old_single_psffn = None
         self.old_single_skyfn = None
+
+    def override_ccd_table_types(self):
+        # LSST pipeline creates these ridiculously long pathnames
+        return {'image_filename': 'S256'}
 
     def set_ccdzpt(self, ccdzpt):
         # Adjust zeropoint for exposure time
@@ -360,6 +374,28 @@ class HscImage(LegacySurveyImage):
     #     img[Ineg,Jneg] = 0.
     #     dq[Ineg,Jneg] |= DQ_BITS['badpix']
     #     invvar[Ineg,Jneg] = 0.
+
+    def get_band(self, primhdr):
+        if 'FILTER' in primhdr:
+            return super().get_band(primhdr)
+        # MBQ1 filter -- actual bandpass quadrant depends on DET-ID
+        f = primhdr.get('FILTER01')
+        if f == 'MBQ1':
+            detid = primhdr['DET-ID']
+            if detid in [ 2, 3, 7, 8, 9, 13, 14, 15, 19, 20, 21,
+                          26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45,
+                          101 ]:
+                return 'M413'
+            elif detid in [ 58, 59, 60, 61, 66, 67, 68, 69, 74, 75, 76, 77,
+                            81, 82, 83, 87, 88, 89, 93, 94, 95, 98, 99, 103 ]:
+                return 'M439'
+            elif detid in [ 54, 55, 56, 57, 62, 63, 64, 65, 70, 71, 72, 73,
+                            78, 79, 80, 84, 85, 86, 90, 91, 92, 96, 97, 102 ]:
+                return 'M465'
+            elif detid in [ 0, 1, 4, 5, 6, 10, 11, 12, 16, 17, 18,
+                            22, 23, 24, 25, 30, 31, 32, 33, 38, 39, 40, 41 ]:
+                return 'M490'
+        return None
 
 def remap_hsc_bitmask(dq, header):
     new_dq = np.zeros(dq.shape, np.int16)
