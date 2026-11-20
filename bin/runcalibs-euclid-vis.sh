@@ -31,7 +31,7 @@ export KMP_AFFINITY=disabled
 
 image_fn="$1"
 
-export PYTHONPATH=${PYTHONPATH}:.
+export PYTHONPATH=.:${PYTHONPATH}
 
 log=$outdir/logs/$(echo "${image_fn}" | sed s#.fits#.log#g)
 logdir=$(dirname $log)

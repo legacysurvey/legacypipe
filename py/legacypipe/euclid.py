@@ -32,6 +32,9 @@ def fitsio_cached(fn):
     return fitsio.FITS(fn)
 
 class EuclidImage(LegacySurveyImage):
+    def override_ccd_table_types(self):
+        return {'procdate': 'S24'}
+
     def get_expnum(self, primhdr):
         # ??
         #return primhdr['PTGID']
@@ -49,6 +52,9 @@ class EuclidImage(LegacySurveyImage):
     # plver...
     #ORIGIN  = 'OU-NIR  '           / Euclid SGS origin
     #SOFTVERS= '4.2     '
+
+    def has_astrometric_calibration(self, ccd):
+        return True
 
     def get_radec_bore(self, primhdr, hdr):
         # Good ol' decimal degrees
@@ -180,9 +186,6 @@ class VisImage(EuclidImage):
         return ps1_to_decam(ps1stars, 'r')
     def get_ps1_band(self):
         return 1 # r
-
-    def override_ccd_table_types(self):
-        return {'procdate': 'S24'}
 
     def set_calib_filenames(self):
         '''
