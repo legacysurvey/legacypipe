@@ -181,6 +181,9 @@ class VisImage(EuclidImage):
     def get_ps1_band(self):
         return 1 # r
 
+    def override_ccd_table_types(self):
+        return {'procdate': 'S24'}
+
     def set_calib_filenames(self):
         '''
         EUC_VIS_GRD-PSF-000-000000-0000000__20240322T192915.424564Z.fits
@@ -204,7 +207,9 @@ class VisImage(EuclidImage):
         # PSF -- I made a copy of the EUC_VIS_GRD-PSF-000... file to the top-level q1/VIS/ directory.
         # Use that, because it is missing from some exposures (eg, 2719)
         visdir = os.path.dirname(dirnm)
-        pat = os.path.join(visdir, '_'.join(parts[:2] + ['GRD-PSF-000-000000-0000000', '*.fits']))
+        pat = os.path.join(visdir, 'shared_files',
+                           '_'.join(parts[:2] + ['GRD-PSF-000-000000-0000000', '*.fits']))
+        print('PSF filename pattern:', pat)
         fns = glob(pat)
         if len(fns) == 1:
             self.merged_psffn = fns[0]
