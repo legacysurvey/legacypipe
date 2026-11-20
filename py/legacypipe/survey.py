@@ -701,10 +701,10 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
 
     elif bands == ['M4376', 'M464', 'M490']:
         print('sdss_rgb: CFHT MB2 + IBIS MB3,4 color scheme')
-        # update planes:
-        rgbscales['M4376'] = (2, rgbscales['M4376'][1])
-        rgbscales['M464']  = (1, rgbscales['M464'][1])
-        rgbscales['M490']  = (0, rgbscales['M490'][1])
+        # update planes & scales
+        rgbscales['M4376'] = (2, 2.0 * rgbscales['M4376'][1])
+        rgbscales['M464']  = (1, 1.6 * rgbscales['M464'][1])
+        rgbscales['M490']  = (0, 2.2 * rgbscales['M490'][1])
 
     for img,band in zip(imgs, bands):
         plane,scale = rgbscales[band]
