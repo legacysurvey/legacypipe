@@ -33,7 +33,7 @@ def fitsio_cached(fn):
 
 class EuclidImage(LegacySurveyImage):
     def override_ccd_table_types(self):
-        return {'procdate': 'S24'}
+        return {'procdate': 'S26'}
 
     def get_expnum(self, primhdr):
         # ??
@@ -117,6 +117,8 @@ class PixelizedSky(Sky):
     def addTo(self, mod, scale=1.):
         assert(self.img.shape == mod.shape)
         mod += scale * self.img
+    def scale(self, s):
+        self.img *= s
 
 class VisImage(EuclidImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0,

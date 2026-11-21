@@ -38,13 +38,12 @@ logdir=$(dirname $log)
 mkdir -p $logdir
 echo "Logging to $log"
 
-#       --threads 16 \
-
 python -u -O legacyzpts/legacy_zeropoints.py \
        --camera nisp \
        --survey-dir ${LEGACY_SURVEY_DIR} \
        --outdir ${outdir} \
        --no-check-photom \
+       --threads 16 \
        $image_fn \
        >> "$log" 2>&1
 
