@@ -8,6 +8,9 @@ def gaia_to_cfht(gaia, bands, **kwargs):
 def gaia_to_decam(gaia, bands, **kwargs):
     return gaia_to_observed('decam', gaia, bands, **kwargs)
 
+def gaia_to_hsc(gaia, bands, **kwargs):
+    return gaia_to_observed('hsc', gaia, bands, **kwargs)
+
 def gaia_to_observed(telescope, gaia, bands,
                      average_color=1.4,
                      color_clip=None,
@@ -64,6 +67,8 @@ def gaia_to_observed(telescope, gaia, bands,
         ('decam', 'M517'): ('G', [-0.118259758, 0.328822667, 1.34465039, -2.35947092, -1.99802997, 7.72242161, -5.60664076, -0.265119231, 2.37946742, -1.39398479, 0.383994131, -0.0532835762, 0.00300229245]),
         # CFHT: Dustin's Untitled506.ipynb
         ('cfht', 'M4376'): ('BP', [-0.46545299, -0.37676112,  0.8657153,  -0.19667747]),
+        # HSC-Niji -- copied from decam!
+        ('hsc', 'M465'): ('G', [-0.159291847, 0.404280833, 0.216697525, 1.33091203, -1.3403765, -3.65518804, 8.69839989, -8.05791299, 4.14722148, -1.28622435, 0.240118347, -0.0249686426, 0.001115772]),
     }
 
     base_mag = dict(G=G, BP=BP, RP=RP)
@@ -75,10 +80,15 @@ def gaia_to_observed(telescope, gaia, bands,
             continue
 
         # clip to reasonable range for the polynomial fit
+        # DECam/IBIS
         if color_clip is None and b in ['M411','M438','M464','M490','M517','N395']:
             lo,hi = (0.0, 3.3)
+        # CFHT
         elif color_clip is None and b in ['M4376']:
             lo,hi = (1.0, 3.0)
+        # HSC-Niji
+        elif color_clip is None and b in ['M465']:
+            lo,hi = (0.0, 3.3)
         elif color_clip is None: # and b in ['g','r','i','z']:
             lo,hi = (-0.6, 4.1)
         cc = np.clip(color, lo, hi)

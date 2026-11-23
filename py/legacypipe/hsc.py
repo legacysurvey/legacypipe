@@ -287,6 +287,11 @@ class HscImage(LegacySurveyImage):
         from legacypipe.ps1cat import ps1_to_hsc
         return ps1_to_hsc(ps1stars, band)
 
+    def gaia_to_observed(self, cat, band):
+        from legacypipe.gaiacat import gaia_to_hsc
+        mags = gaia_to_hsc(cat, [band])
+        return mags[0]
+
     def read_image(self, header=False, **kwargs):
         img = super().read_image(header=header, **kwargs)
         if header:
@@ -300,6 +305,7 @@ class HscImage(LegacySurveyImage):
         return remap_hsc_bitmask(dq, header)
 
     def get_zeropoint(self, primhdr, hdr):
+        return None
         # CALEXP data products have FLUXMAG0.
         flux = primhdr.get('FLUXMAG0')
         if flux is not None:
