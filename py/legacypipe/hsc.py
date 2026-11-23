@@ -92,7 +92,14 @@ class HscImage(LegacySurveyImage):
         self.wtfn = self.imgfn
 
     def get_expnum(self, primhdr):
-        return primhdr['EXPID']
+        #return primhdr['EXPID']
+        # EXPID   =             76067236       (= IDNUM * 200 + DETSER)
+        # DETNAME = '1_06    '
+        # DETSER  = '36      '
+        # FRAMEID = 'HSCA38033706'       / Image sequential number in archive
+        # EXP-ID  = 'HSCE00380336'       / ID of exposure (shot) for this data
+        # IDNUM   =               380336 / identifier of this full focal plane exposure
+        return primhdr['IDNUM']
 
     def get_ccdname(self, primhdr, hdr):
         return primhdr['DETSER'].strip().upper()
