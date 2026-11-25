@@ -92,7 +92,14 @@ class HscImage(LegacySurveyImage):
         self.wtfn = self.imgfn
 
     def get_expnum(self, primhdr):
-        return primhdr['EXPID']
+        #return primhdr['EXPID']
+        # EXPID   =             76067236       (= IDNUM * 200 + DETSER)
+        # DETNAME = '1_06    '
+        # DETSER  = '36      '
+        # FRAMEID = 'HSCA38033706'       / Image sequential number in archive
+        # EXP-ID  = 'HSCE00380336'       / ID of exposure (shot) for this data
+        # IDNUM   =               380336 / identifier of this full focal plane exposure
+        return primhdr['IDNUM']
 
     def get_ccdname(self, primhdr, hdr):
         return primhdr['DETSER'].strip().upper()
@@ -287,6 +294,11 @@ class HscImage(LegacySurveyImage):
         from legacypipe.ps1cat import ps1_to_hsc
         return ps1_to_hsc(ps1stars, band)
 
+    def gaia_to_observed(self, cat, band):
+        from legacypipe.gaiacat import gaia_to_hsc
+        mags = gaia_to_hsc(cat, [band])
+        return mags[0]
+
     def read_image(self, header=False, **kwargs):
         img = super().read_image(header=header, **kwargs)
         if header:
@@ -300,6 +312,7 @@ class HscImage(LegacySurveyImage):
         return remap_hsc_bitmask(dq, header)
 
     def get_zeropoint(self, primhdr, hdr):
+        return None
         # CALEXP data products have FLUXMAG0.
         flux = primhdr.get('FLUXMAG0')
         if flux is not None:
