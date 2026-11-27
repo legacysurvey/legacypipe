@@ -91,8 +91,9 @@ RUN for x in \
     fitsio \
     requests \
     django \
-; do pip3 install --break-system-packages --no-cache $x; done
+; do pip3 install --break-system-packages --no-cache-dir $x; done
 
+# no need for this - ubuntu python3-is-python does this
 #RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
 #RUN ln -s /usr/bin/python3 /usr/bin/python
 ENV PYTHON=python3
@@ -106,6 +107,7 @@ WORKDIR /src
 RUN ln -s /usr/include /usr/local/include/netpbm
 
 # Astrometry.net
+# This builds for a generic enough CPU so that it works on NERSC Perlmutter
 ENV ARCH_FLAGS=-march=x86-64-v3
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
@@ -154,6 +156,7 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
 # # Compile a local version of Scamp to pick up adding EXTNAME to the results:
 # # https://github.com/astromatic/scamp/commit/d936c73d7dd08382b70cb32ceb1a535ffca81732
 # # (that's in 2.14.0; ubuntu currently has 2.10.0 (as of 2026-03-07))
+# Ubuntu 26.04 has Scamp 2.14.0
 # RUN git clone https://github.com/astromatic/scamp.git && \
 #     cd scamp && \
 #     ./autogen.sh && \
@@ -178,18 +181,17 @@ RUN git clone https://github.com/legacysurvey/imagine.git \
  && cp /src/imagine/docker/cutouts/cutout /usr/local/bin/ \
  && chmod 755 /usr/local/bin/cutout
 
-# Cuda
-RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
- && dpkg -i cuda-keyring_1.1-1_all.deb \
- && apt update \
- && apt install -y cuda-toolkit-13-2 \
- && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-RUN python -m pip install --no-cache-dir --break-system-packages cupy-cuda13x
-RUN python -m pip install pynvtx --break-system-packages
-
 # the "cutout" script wants the "imagine" code to be in /app/imagine
 RUN ln -s /src /app
+
+# Cuda
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2604/x86_64/cuda-keyring_1.1-1_all.deb \
+ && dpkg -i cuda-keyring_1.1-1_all.deb \
+ && apt update \
+ && apt install -y --no-install-recommends cuda-toolkit-13-4 \
+ && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN python -m pip install --no-cache-dir --break-system-packages cupy-cuda13x pynvtx
 
 # # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
@@ -238,3 +240,12 @@ RUN python -O -m compileall \
 # or cuda-nsight-13-2 ?
 
 #RUN cd /src/imagine && git pull && echo 3
+
+# Scipy 1.8 busted RectBivariateSpline ?!?!
+RUN pip uninstall scipy --break-system-packages --yes \
+ && pip install scipy==1.17.1 --break-system-packages --no-cache-dir
+
+# Make astropy cache files readable!?!!
+RUN chmod -R a+rwX $HOME/.cache/astropy
+
+RUN cd qdo && git pull && python3 setup.py install
