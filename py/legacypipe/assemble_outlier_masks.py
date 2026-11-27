@@ -99,11 +99,12 @@ def main(survey=None, opt=None, args=None):
         outfn = os.path.join(outdir, imfn.replace('.fits', '-outlier.fits'))
         trymakedirs(outfn, dir=True)
         tempfn = outfn.replace('.fits', '-tmp.fits')
+        compress_kwargs = dict(compress='HCOMPRESS')
         with fitsio.FITS(tempfn, 'rw', clobber=True) as fits:
             fits.write(None, header=version_hdr)
             for i in I:
                 mask = outlier_masks[i]
-                fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i])
+                fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i], **compress_kwargs)
         os.rename(tempfn, outfn)
         print('Wrote', outfn)
 
@@ -141,7 +142,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
     for b in bricks:
         print('Reading outlier mask for brick', b.brickname,
-              ':', catsurvey.find_file('outliers_mask', brick=b.brickname, output=False))
+              ':', catsurvey.find_file('outliers-mask', brick=b.brickname, output=False))
         ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, pos_neg_mask=posneg_mask,
                                     subimage=False, output=False, apply_masks=False)
         if not ok:

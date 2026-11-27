@@ -86,6 +86,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
     demand a match up to the length of those variables.  This can happen if, eg,
     the survey-ccds table has the PLVER or PLPROCID columns too short.
     '''
+    print('validate_version:', fn, 'quiet=',quiet)
     if not os.path.exists(fn):
         if not quiet:
             info('File not found {}'.format(fn))

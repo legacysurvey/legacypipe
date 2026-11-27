@@ -32,6 +32,9 @@ def fitsio_cached(fn):
     return fitsio.FITS(fn)
 
 class EuclidImage(LegacySurveyImage):
+    def override_ccd_table_types(self):
+        return {'procdate': 'S26'}
+
     def get_expnum(self, primhdr):
         # ??
         #return primhdr['PTGID']
@@ -49,6 +52,9 @@ class EuclidImage(LegacySurveyImage):
     # plver...
     #ORIGIN  = 'OU-NIR  '           / Euclid SGS origin
     #SOFTVERS= '4.2     '
+
+    def has_astrometric_calibration(self, ccd):
+        return True
 
     def get_radec_bore(self, primhdr, hdr):
         # Good ol' decimal degrees
@@ -111,6 +117,8 @@ class PixelizedSky(Sky):
     def addTo(self, mod, scale=1.):
         assert(self.img.shape == mod.shape)
         mod += scale * self.img
+    def scale(self, s):
+        self.img *= s
 
 class VisImage(EuclidImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0,
@@ -204,7 +212,9 @@ class VisImage(EuclidImage):
         # PSF -- I made a copy of the EUC_VIS_GRD-PSF-000... file to the top-level q1/VIS/ directory.
         # Use that, because it is missing from some exposures (eg, 2719)
         visdir = os.path.dirname(dirnm)
-        pat = os.path.join(visdir, '_'.join(parts[:2] + ['GRD-PSF-000-000000-0000000', '*.fits']))
+        pat = os.path.join(visdir, 'shared_files',
+                           '_'.join(parts[:2] + ['GRD-PSF-000-000000-0000000', '*.fits']))
+        print('PSF filename pattern:', pat)
         fns = glob(pat)
         if len(fns) == 1:
             self.merged_psffn = fns[0]

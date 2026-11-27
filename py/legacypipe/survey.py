@@ -518,6 +518,11 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    r2 =    (1, 3.4 * rgb_stretch_factor),
                    i2 =    (0, 3.0 * rgb_stretch_factor),
                    y  =    (0, 2.2 * rgb_stretch_factor),
+                   # HSC MBQ1:
+                   M413 = (2, 6.0 * rgb_stretch_factor),
+                   M439 = (2, 6.0 * rgb_stretch_factor),
+                   M465 = (2, 6.0 * rgb_stretch_factor),
+                   # M490
                    # WIRO
                    NB_A = (0, 6. * rgb_stretch_factor),
                    NB_B = (0, 6. * rgb_stretch_factor),
@@ -526,7 +531,8 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    NB_E = (0, 6. * rgb_stretch_factor),
                    # CFHT
                    CaHK = (2, 6.0 * rgb_stretch_factor),
-                   M4376 = (2, 6.0 * rgb_stretch_factor),
+                   M4376 = (1, 6.0 * rgb_stretch_factor),
+                   M4112 = (2, 6.0 * rgb_stretch_factor),
                    )
     # SUPRIME
     rgbscales.update({
@@ -642,16 +648,77 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 rgb[:,:,2] += bf*v
         return rgb
 
-    elif bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
-        print('sdss_rgb: IBIS 5-band color scheme')
+    elif ((bands == ['M411', 'M438', 'M464', 'M490', 'M517']) or
+          (bands == ['M4112', 'M4376', 'M464', 'M490', 'M517'])):
+        print('sdss_rgb: IBIS 5-band color scheme, or IBIS/CFHT mix')
 
         rgbvec = {
-            'M411': (0.0, 0.0, 0.6),
-            'M438': (0.0, 0.2, 0.4),
-            'M464': (0.0, 0.6, 0.0),
-            'M490': (0.4, 0.2, 0.0),
-            'M517': (0.6, 0.0, 0.0),
+            'M411' : (0.0, 0.0, 0.6),
+            'M4112': (0.0, 0.0, 0.6),
+            'M438' : (0.0, 0.2, 0.4),
+            'M4376': (0.0, 0.2, 0.4),
+            'M464' : (0.0, 0.6, 0.0),
+            'M490' : (0.4, 0.2, 0.0),
+            'M517' : (0.6, 0.0, 0.0),
         }
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+        return rgb
+
+    elif bands == ['M4112', 'M4376']:
+        print('sdss_rgb: CFHT MB1/MB2 color scheme')
+
+        rgbvec = {
+            'M4112': (0.0, 0.5, 1.0),
+            'M4376': (1.0, 0.5, 0.0),
+        }
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+        return rgb
+
+    elif bands == ['M4376', 'M464', 'M490']:
+        print('sdss_rgb: CFHT MB2 + IBIS MB3,4 color scheme')
+        # update planes & scales
+        rgbscales['M4376'] = (2, 2.0 * rgbscales['M4376'][1])
+        rgbscales['M464']  = (1, 1.6 * rgbscales['M464'][1])
+        rgbscales['M490']  = (0, 2.2 * rgbscales['M490'][1])
+
+    elif bands == ['M413', 'M439', 'M465', 'M490']:
+        print('sdss_rgb: HSC/Niji 4 color scheme')
+        rgbvec = dict(
+            M413 = (0.,   0.,  0.75),
+            M439 = (0.,   0.5, 0.25),
+            M465 = (0.25, 0.5, 0.),
+            M490 = (0.75, 0.,  0.))
+
         for img,band in zip(imgs, bands):
             _,scale = rgbscales[band]
             rf,gf,bf = rgbvec[band]
@@ -751,7 +818,13 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
         bands[4] == 'I-A-L527'):
         return sdss_rgb(imgs, bands)
 
-    if len(bands) == 5 and bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
+    # UGHHH
+    if len(bands) == 5 and ((bands == ['M411', 'M438', 'M464', 'M490', 'M517']) or
+                            (bands == ['M4112', 'M4376', 'M464', 'M490', 'M517'])):
+        return sdss_rgb(imgs, bands)
+
+    # HSC-Niji
+    if bands == ['M413', 'M439', 'M465', 'M490']:
         return sdss_rgb(imgs, bands)
 
     if len(bands) == 5:
@@ -1009,6 +1082,7 @@ class LegacySurveyData(object):
         #from legacypipe.cfht   import MegaPrimeImage
         from legacypipe.cfht   import MegaPrimeElixirImage
         from legacypipe.cfht   import MegaPrimeQuicklookImage
+        from legacypipe.cfht   import MegaPrimeQuicklook2Image
         from legacypipe.hsc    import HscImage
         from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
@@ -1066,6 +1140,7 @@ class LegacySurveyData(object):
             #'megaprime': MegaPrimeImage,
             'megaprime': MegaPrimeElixirImage,
             'quicklook': MegaPrimeQuicklookImage,
+            'quicklook2': MegaPrimeQuicklook2Image,
             'hsc'    : HscImage,
             'panstarrs' : PanStarrsImage,
             'wiro'   : WiroImage,

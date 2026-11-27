@@ -86,6 +86,8 @@ class ps1cat(HealpixedCatalog):
                    M517=0,
                    # CaII H+K narrow-band
                    N395=0,
+                   # HSC-Niji
+                   M465=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -233,7 +235,6 @@ def ps1_to_decam(psmags, band):
 
         # DECam
         N395 = [ -0.0175,  1.9864,  1.3696, -1.2493],
-
         )[band]
 
     # Most are with respect to g-i, some are g-r...
@@ -343,18 +344,23 @@ def ps1_to_hsc(psmags, band):
     '''
     # https://desi.lbl.gov/trac/wiki/DecamLegacy/Reductions/Photometric
     g_index = ps1cat.ps1band['g']
+    r_index = ps1cat.ps1band['r']
     i_index = ps1cat.ps1band['i']
     gmag = psmags[:,g_index]
+    rmag = psmags[:,r_index]
     imag = psmags[:,i_index]
     gi = gmag - imag
-    coeffs = dict(
-        g = [ 0., 0., 0., 0.],
-        r = [ 0., 0., 0., 0.],
-        i = [ 0., 0., 0., 0.],
-        z = [ 0., 0., 0., 0.],
-        Y = [ 0., 0., 0., 0.],
+    gr = gmag - rmag
+    color,coeffs = dict(
+        g = (gi, [ 0., 0., 0., 0.]),
+        r = (gi, [ 0., 0., 0., 0.]),
+        i = (gi, [ 0., 0., 0., 0.]),
+        z = (gi, [ 0., 0., 0., 0.]),
+        Y = (gi, [ 0., 0., 0., 0.]),
+        # HSC-Niji -- copied from IBIS!
+        M465 = (gr, [ 0.0923, -0.5188, 1.9504, -2.7307, 1.2414]),
     )[band]
-    colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
+    colorterm = coeffs[0] + coeffs[1]*color + coeffs[2]*color**2 + coeffs[3]*color**3
     return colorterm
 
 def ps1_to_lsst_comcam(psmags, band):

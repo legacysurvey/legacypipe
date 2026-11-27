@@ -523,17 +523,18 @@ def main(args=None):
     if not numpy.all(ccds.ccd_cuts == 0):
         print('Warning: zeroing existing ccd_cuts')
         ccds.ccd_cuts = 0.
+
     if len(args.zeropoints) > 0:
         zp = fits_table(args.zeropoints)
         patch_zeropoints(zp, ccds, annotated)
 
-    from pkg_resources import resource_filename
-    fn = resource_filename('legacyzpts',
-                           'data/{}-bad_expid.txt'.format(args.camera))
-    if os.path.exists(fn):
-        bad_expid = psfzpt_cuts.read_bad_expid(fn)
-    else:
-        bad_expid = {}
+    from importlib import resources
+    bad_expid = {}
+    ref = resources.files('legacyzpts').joinpath('data', args.camera +
+                                                 '-bad_expid.txt')
+    with resources.as_file(ref) as fn:
+        if os.path.exists(fn):
+            bad_expid = psfzpt_cuts.read_bad_expid(fn)
 
     kwargs = {}
     if args.max_seeing:

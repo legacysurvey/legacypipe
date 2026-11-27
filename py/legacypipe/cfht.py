@@ -3,6 +3,7 @@ import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
+from legacypipe.utils import get_data_file
 
 '''
 Some top-level instructions for handling CFHT data.
@@ -402,6 +403,17 @@ class MegaPrimeElixirImage(MegaPrimeImage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        survey = args[0]
+        ccd = args[1]
+
+        self.ccdshear = None
+        if ccd is not None:
+            if 'ccdshear' in ccd.get_columns():
+                self.ccdshear = ccd.ccdshear.reshape((2,2))
+                print('CCD shear:', self.ccdshear)
+                if np.all(self.ccdshear == 0.):
+                    self.ccdshear = None
+
         self.zp0.update(
             # HACK M4112
             #M4112 = 24.28,
@@ -624,22 +636,125 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         #    print('Warning: Scamp header', self.scamp_fn, 'does not exist, using default WCS')
 
     def get_wcs(self, hdr=None):
+        from astrometry.util.util import Tan, Sip
         if self.scamp_wcs is not None:
             return self.scamp_wcs
         # Look for Scamp "head" file
         if os.path.exists(self.scamp_fn):
             # Load Scamp WCS
             self.scamp_wcs = self.read_scamp_wcs(hdr=hdr)
+            # Apply ccdraoff, ccddecoff
+            if self.scamp_wcs is not None:
+                # Correction: ccd ra,dec offsets from zeropoints/CCDs file
+                dra,ddec = self.dradec
+                print('Correcting CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
+                    dra *3600/self.pixscale,
+                    ddec*3600/self.pixscale))
+                r,d = self.scamp_wcs.get_crval()
+                self.scamp_wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+        else:
+            print('scamp_fn does not exist')
         if self.scamp_wcs is not None:
             return self.scamp_wcs
 
         if self.do_solve_field:
             if not os.path.exists(self.wcs_initial_fn):
                 self.run_solve_field()
-            from astrometry.util.util import Sip
-            return Sip(self.wcs_initial_fn)
+            #return Sip(self.wcs_initial_fn)
 
-        return super().get_wcs(hdr=hdr)
+        #print('Image TAN header:', tan)
+        medfn = get_data_file('config', 'cfht-wcs',
+                              'cfht-median-wcs-o%s.fits' % self.ccdname.replace('CCD', ''))
+        med = Sip(medfn)
+        if self.do_solve_field:
+            # Both the Astrometry.net wcs-initial and the median SIP solution have crpix-center,
+            # so swap in the wcs-initial CRVAL and CD
+            wcs_init = Sip(self.wcs_initial_fn)
+            med.set_crval(wcs_init.wcstan.crval)
+            med.set_cd(wcs_init.wcstan.cd)
+
+            # # Compute best-fit shear in the "med" WCS to match wcs-initial
+            # H,W = wcs_init.shape
+            # xgrid,ygrid = np.meshgrid(np.linspace(1, W, 6), np.linspace(1, H, 11))
+            # xgrid = xgrid.ravel()
+            # ygrid = ygrid.ravel()
+            # r,d = wcs_init.pixelxy2radec(xgrid, ygrid)
+            # 
+            # from astrometry.util.fits import fits_table
+            # from legacy_zeropoints import cd_shear_distance
+            # from scipy.optimize import minimize
+            # 
+            # fake_phot = fits_table()
+            # fake_phot.x_fit = xgrid - 1
+            # fake_phot.y_fit = ygrid - 1
+            # fake_phot.ra_now = r
+            # fake_phot.dec_now = d
+            # 
+            # print('Without shear: wcs-initial to median-SIP:', cd_shear_distance(np.zeros(4), med, 0., 0., fake_phot, fake_phot))
+            # 
+            # S = minimize(cd_shear_distance, np.array([0., 0., 0., 0.]),
+            #              args=(med, 0., 0., fake_phot, fake_phot))
+            # print(S)
+            # S = S.x
+            # 
+            # print('With shear: wcs-initial to median-SIP:', cd_shear_distance(S, med, 0., 0., fake_phot, fake_phot))
+            # 
+            # # the optimizer fits on values near zero - add the identity matrix here
+            # S = S * 1e3 + np.array([1., 0., 0., 1.])
+            # 
+            # cd = np.array(med.cd).reshape((2,2))
+            # cd = S.reshape((2,2)) @ cd
+            # med.cd = cd.ravel()
+            # 
+            # print('With shear applied: wcs-initial to median-SIP:', cd_shear_distance(np.zeros(4), med, 0., 0., fake_phot, fake_phot))
+
+            #print('Median SIP header + CRVAL:', med)
+        else:
+            # Read image header WCS (for CRVAL) + median SIP headers, then apply shift + shear
+            if hdr is None:
+                hdr = self.read_image_header()
+            tan = Tan(hdr)
+            med.set_crval(tan.crval)
+            
+        # # Read solve-field WCS to get the image center RA,Dec position; shift CRVAL
+        # if self.do_solve_field:
+        #     sf_wcs = Sip(self.wcs_initial_fn)
+        #     rc,dc = sf_wcs.radec_center()
+        #     rc0,dc0 = med.radec_center()
+        #     print('Astrometry.net RA,Dec center: %.4f, %.4f' % (rc,dc))
+        #     print('Median SIP + header WCS     : %.4f, %.4f' % (rc0,dc0))
+        # 
+        #     from legacy_zeropoints import wrap_delta_ra
+        #     dra,ddec = wrap_delta_ra(rc, rc0), dc - dc0
+        #     r,d = med.get_crval()
+        #     med.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+        #     print('Correcting CRVAL (from Astrometry.net) by (%.2f, %.2f) pix in RA,Dec' % (
+        #         dra *3600/self.pixscale,
+        #         ddec*3600/self.pixscale))
+        #     rc0,dc0 = med.radec_center()
+        #     print('Median SIP + header WCS     : %.4f, %.4f' % (rc0,dc0))
+            
+        # Apply raoff,decoff
+        dra,ddec = self.dradec
+        if dra == 0 and ddec == 0:
+            print('No RA,Dec offset to apply')
+        else:
+            print('Correcting CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
+                dra *3600/self.pixscale,
+                ddec*3600/self.pixscale))
+            r,d = med.get_crval()
+            med.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+
+        if self.ccdshear is not None:
+            print('Applying CD matrix shear:', self.ccdshear)
+            cd = med.get_cd()
+            cd = np.array(cd).reshape((2,2))
+            cd = self.ccdshear @ cd
+            med.set_cd(cd.ravel())
+        else:
+            print('No CD matrix shear to apply')
+
+        return med
 
     def run_solve_field(self):
         from legacypipe.utils import get_data_file
@@ -664,6 +779,10 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             ext = 0
 
         with get_data_file('data', 'an-cfht.cfg') as configfn:
+
+            #medfn = get_data_file('config', 'cfht-wcs',
+            #                      'cfht-median-wcs-o%s.fits' % self.ccdname.replace('CCD', ''))
+
             for ds in [2, 4]:
                 args = ['--config', configfn,
                         '--downsample', ds,
@@ -676,8 +795,10 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                         '--no-plots',
                         '--no-remove-lines',
                         '--continue',
-                        '--crpix-x', hdr['CRPIX1'],
-                        '--crpix-y', hdr['CRPIX2'],
+                        #'--crpix-x', hdr['CRPIX1'],
+                        #'--crpix-y', hdr['CRPIX2'],
+                        #'--predistort', medfn,
+                        '--crpix-center',
                         '--new-fits', 'none',
                         '--temp-axy',
                         '--solved', 'none',
@@ -798,6 +919,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             use_lacosmic = self.do_lacosmic
         if use_lacosmic:
             if not os.path.exists(self.lacosmic_fn):
+                print('lacosmic calib file not found:', self.lacosmic_fn, '; re-running')
                 self.run_lacosmic()
             slc = kwargs.pop('slc', None)
             if slc is not None:
@@ -882,7 +1004,12 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         #     M4376=0.17,
         #     )
         self.do_solve_field = True
+        #self.do_solve_field = False
         self.do_lacosmic = True
+
+    # Options are None, "rotate", "shear"
+    def cd_transform_type(self):
+        return 'shear'
 
     def get_extension_list(self, debug=False):
         return [0]
@@ -892,10 +1019,6 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
     def get_camera(self, primhdr):
         return 'quicklook'
 
-    def set_calib_filenames(self):
-        super().set_calib_filenames()
-        print('Calib filenames: sky', self.skyfn)
-        
     def fix_image_header(self, hdr):
         # these files have fine EXTNAME cards; no-op
         pass
@@ -903,7 +1026,7 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacypipe.ps1cat import ps1_to_cfht
         return ps1_to_cfht(ps1stars, band)
-    
+
     def set_calib_filenames(self):
         super().set_calib_filenames()
         calibdir = self.survey.get_calib_dir()
@@ -913,6 +1036,546 @@ class MegaPrimeQuicklookImage(MegaPrimeElixirImage):
         self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-scamp.head')
         # ugh drop a directory component off these filenames (relative to superclass)
         self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir,
-                                           calname + '.wcs')
+                                           basename + '.wcs')
         self.lacosmic_fn = os.path.join(calibdir, 'lacosmic', imgdir,
-                                        calname + '-cr.fits')
+                                        basename + '-cr.fits')
+
+
+class MegaPrimeQuicklook2Image(MegaPrimeQuicklookImage):
+    '''
+    A class for jointly dealing with the 40 chips of a MegaCam exposure.
+    '''
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=None, **kwargs):
+        print('Quicklook2: fn', image_fn, 'hdu', image_hdu)
+        if ccd is None:
+            self.ccd_num = image_hdu
+        else:
+            #print('CCD object:')
+            #ccd.about()
+            self.ccd_num = int(ccd.ccdname.replace('CCD', ''), 10)
+
+        if image_hdu is not None:
+            # Add the "o##.flt" suffix to the image filename!
+            image_fn = image_fn + 'o%02i.flt' % image_hdu
+            image_hdu = 0
+            self.hdu = 0
+
+        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
+
+    # Options are None, "rotate", "shear"
+    def cd_transform_type(self):
+        return None
+
+    def get_wcs(self, hdr=None):
+        from astrometry.util.util import Tan, Sip
+        if os.path.exists(self.wcs_final_fn):
+            wcs = Sip(self.wcs_final_fn)
+            # Apply raoff,decoff
+            dra,ddec = self.dradec
+            if dra == 0 and ddec == 0:
+                pass
+            print('Correcting wcs-final CRVAL by (%.2f, %.2f) pix in RA,Dec' % (
+                dra *3600/self.pixscale,
+                ddec*3600/self.pixscale))
+            r,d = wcs.get_crval()
+            wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+            return wcs
+
+        if self.do_solve_field:
+            if not os.path.exists(self.wcs_initial_fn):
+                self.run_solve_field()
+        # or read the approximate WCS from the image header?
+        assert(os.path.exists(self.wcs_initial_fn))
+        return Sip(self.wcs_initial_fn)
+
+    def needs_two_round_zeropointing(self):
+        return True
+
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr,
+                               first_round=False, **kwargs):
+        '''
+        Called after legacy_zeropoints has just written the "photom" and
+        "annotated" files.  (The objects are passed as *ann* and *photom*,
+        along with the annotated header *hdr*.)
+        '''
+        print('zeropointing completed: first_round =', first_round)
+        if first_round:
+            # Run full-focal-plane astrometric calibration.
+            # Write wcs-final outputs
+            print('Running full-focal-plane astrometric calibration')
+            self.full_focal_plane_astrometry(photomfn)
+
+    def reinitialize(self, first_round=True):
+        if (not first_round) and (self.ccd_num is not None):
+            assert(os.path.exists(self.wcs_final_fn))
+
+    def get_extension_list(self, debug=False):
+        if self.ccd_num is None:
+            return np.arange(40)
+        return super().get_extension_list(debug=debug)
+
+    def read_image_primary_header(self, **kwargs):
+        if self.ccd_num is None:
+            im0 = MegaPrimeQuicklook2Image(self.survey, None, image_fn=self.image_filename,
+                                           image_hdu=0)
+            return im0.read_image_primary_header(**kwargs)
+        return super().read_image_primary_header(**kwargs)
+
+    def get_camera(self, primhdr):
+        return 'quicklook2'
+
+    def set_calib_filenames(self):
+        super().set_calib_filenames()
+        #print('set_calib_filenames: my fn=', self.image_filename, 'hdu=', self.hdu,
+        #      'ccd_num=',self.ccd_num)
+
+        if self.ccd_num is not None:
+            self.skyfn = self.merged_skyfn
+            self.merged_skyfn = self.merged_skyfn.replace('o%02i-splinesky' % self.ccd_num,
+                                                          '-splinesky')
+            self.psffn = self.merged_psffn
+            self.merged_psffn = self.merged_psffn.replace('o%02i-psfex' % self.ccd_num,
+                                                          '-psfex')
+        else:
+            self.skyfn = None
+            self.psffn = None
+        # print('  sky-single:', self.skyfn)
+        # print('  sky-merged:', self.merged_skyfn)
+        # print('  psf-single:', self.psffn)
+        # print('  psf-merged:', self.merged_psffn)
+        self.wcs_final_fn = self.wcs_initial_fn.replace('/wcs-initial/', '/wcs-final/')
+
+    def full_focal_plane_astrometry(self, photom_fn):
+        from astrometry.util.util import Tan, fit_sip_wcs_py
+        from astrometry.util.starutil_numpy import radectoxyz, xyztoradec, arcsec_between
+        from astrometry.util.fits import fits_table
+        from scipy.optimize import minimize
+        from scipy.interpolate import CubicSpline
+        import time
+        from functools import lru_cache
+
+        '''
+
+        This implements an idea from Stephen Gwyn that he used for the UNIONS
+        reductions. (Many thanks to Stephen for sharing his solution.)
+
+        The idea is to use a single polynomial distortion for the whole focal
+        plane, and to limit it to a radial distortion of the form
+
+        r -> r + c1 * r + c3 * r**3 + c5 * r**5
+
+        Meanwhile, constant and linear terms for each CCD are allowed to vary.
+
+        There is then a choice of which coordinate system to do the
+        minimization in.  I opted for neither RA,Dec nor pixels, but rather
+        something like the "intermediate world coordinates" used in the WCS
+        standard.  I probably should have called these "eta,xi" or something
+        like that, but I opted for "u,v".  These are in degrees, and are
+        centered on (0,0) being the TANgent plane projection point.
+
+        I went for minimizing the sum of L1 distances in this u,v space (to
+        handle the fact that some of the star fits may not have worked
+        correctly - there could be outliers).
+
+        The reference star RA,Dec positions are projected into u,v once at the
+        beginning, where the WCS object "proj" does that projection around
+        CRVAL to yield (u_ref, v_ref)
+
+        The distortion function is applied to (u_ref, v_ref) to yield
+        distorted (u_ref_dist, v_ref_dist) positions.
+
+        It's in that "distorted u,v" space that the L1 distance is computed.
+
+        (I *think* this is kind of how the TPV distortions work?)
+
+        Meanwhile, the pixel positions (P.x_fit+1, P.y_fit+1) get pushed
+        through a sheared CD matrix into "IWC" coordinates -- distorted u,v
+        coords.
+
+        (I say "shear", but really it's a modification of the CD matrix:
+            CD -> (Identity + S) * CD
+        )
+
+        At the start, we compute for each CCD its initial (u_center, v_center),
+        just so we're in the right ballpark. Then we also fit (u_offs, v_offs)
+        offsets for each chip, because the distortion parameters will change
+        where the chip center is, and because we want to let the offset of each
+        CCD float, along with a shear to the initiall WCS.
+
+        So, in total, we're fitting:
+        * 3 radial distortion paramaters (c1, c3, c5)
+        * 2 offset parameters per CCD (u_offs, v_offs)
+        * 4 shear parameters per CCD (cd_shears)
+
+        for a total of 243 parameters (!).
+        '''
+
+        hdus = self.get_extension_list()
+        #print('wcs_initial', self.wcs_initial_fn)
+        #print('round1 photom', photom_fn)
+        wcs_initial = [Tan(self.wcs_initial_fn.replace('.wcs', 'o%02i.wcs' % hdu))
+                       for hdu in hdus]
+        Nccd = len(wcs_initial)
+
+        # The boresight is between the top/bottom-centers of chips 13 and 22.
+        # Use that as the center of projection / CRVAL.
+        rd13 = wcs_initial[13].radec_center()
+        rd22 = wcs_initial[22].radec_center()
+        xyz13 = radectoxyz(*rd13)[0]
+        xyz22 = radectoxyz(*rd22)[0]
+        ra_bore, dec_bore = xyztoradec((xyz13+xyz22)/2.)
+        # TAN projection around boresight.
+        # this pixel scale and image size don't really matter - we only use "iwc" coords
+        ps = 1./3600
+        proj = Tan(ra_bore, dec_bore, 0., 0., -ps, 0., 0., ps, 22000, 16000)
+
+        # Pull out just the Gaia stars from the round-1 photometry results.
+        P = fits_table(photom_fn)
+        P.cut(P.gaia_sourceid > 0)
+
+        # Identify which stars in the photometry file lie in each chip.
+        # Here we're assuming that the CCDNAME "CCD##" corresponds to WCS file "o##.wcs".
+        chip_inds = [np.flatnonzero(P.ccdname == 'CCD%02i'%i) for i in range(Nccd)]
+
+        # Project reference stars into (undistorted) u,v space.
+        ok,u_ref,v_ref = proj.radec2iwc(P.ra_now, P.dec_now)
+        assert(np.all(ok))
+
+        # Project CCD centers into u,v space.
+        rd = np.array([wcs.radec_center() for wcs in wcs_initial])
+        ok,u_center,v_center = proj.radec2iwc(rd[:,0], rd[:,1])
+        assert(np.all(ok))
+
+        ###   (u_ref, v_ref) are constant for the rest of this function.
+        ###   (u_center, v_center) are also constant.
+
+        def distort_r(c1, c3, c5, r):
+            r_dist = r + c1*r + c3*r**3 + c5*r**5
+            return r_dist
+
+        def distort_uv(c1, c3, c5, u, v):
+            # Apply radial distortion
+            r_ref = np.hypot(u, v)
+            r_dist = distort_r(c1, c3, c5, r_ref)
+            u_ref_dist = u * r_dist / r_ref
+            v_ref_dist = v * r_dist / r_ref
+            return u_ref_dist, v_ref_dist
+
+        def shear_wcs(wcs, shear):
+            # For numerical scaling, we fit for values away from the identity matrix
+            shear = np.array([1., 0., 0., 1.]) + shear
+            cd = wcs.get_cd()
+            cd = np.array(cd).reshape((2,2))
+            cd = shear.reshape((2,2)) @ cd
+            wcs.cd = cd.ravel()
+
+        def ccd_uv(wcs, u0, v0, shear, x, y):
+            mywcs = Tan(wcs)
+            shear_wcs(mywcs, shear)
+            # Pixels to IWC (only depends on CRPIX, CD)
+            u,v = mywcs.pixelxy2iwc(x, y)
+            return u+u0, v+v0
+
+        # This is the function to be minimized when we're doing the full fit.
+        # *In practice*, we use a "caching" version of this instead!  See below.
+        # def l1_dist_full(params, u_ref, v_ref, P, chip_inds, u_center, v_center,
+        #                  wcs_initial):
+        #     # unpack parameters...
+        #     c1,c3,c5 = params[:3]
+        #     params = params[3:]
+        #     u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+        #     params = params[2*Nccd:]
+        #     cd_shears = params
+        #     u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
+        #     l1_total = 0.
+        #     for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+        #         s = cd_shears[i*4:(i+1)*4]
+        #         u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s,
+        #                      P.x_fit[I]+1., P.y_fit[I]+1.)
+        #         l1_total += np.sum(np.abs(u - u_ref_dist[I]) + np.abs(v - v_ref_dist[I]))
+        #     return l1_total
+
+        # This is the function to be minimized when fitting the u,v offset and shear for
+        # a single CCD.
+        def l1_dist_ccd(params, u_ref, v_ref, wcs, u_c, v_c, x, y):
+            u0,v0 = params[:2]
+            shear = params[2:]
+            u,v = ccd_uv(wcs, u0 + u_c, v0 + v_c, shear, x, y)
+            return np.sum(np.abs(u_ref - u) + np.abs(v_ref - v))
+
+        # Returns delta-u, delta-v for a given set of parameters; used to
+        # evaluate solutions.
+        def get_dudv(params):
+            c1,c3,c5 = params[:3]
+            params = params[3:]
+            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+            params = params[2*Nccd:]
+            cd_shears = params
+            u_ref_dist, v_ref_dist = distort_uv(c1, c3, c5, u_ref, v_ref)
+            U,V = np.zeros(len(u_ref)), np.zeros(len(u_ref))
+            for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+                s = cd_shears[i*4:(i+1)*4]
+                u,v = ccd_uv(wcs, u_offs[i] + u_center[i], v_offs[i] + v_center[i], s, P.x_fit[I]+1., P.y_fit[I]+1.)
+                U[I] = u
+                V[I] = v
+            return U - u_ref_dist, V - v_ref_dist
+
+        '''
+        The following variables and functions implement a caching version of
+        the l1_dist_full() function.  The observation is that the minimize()
+        function steps in all parameters, the majority of which are the
+        CCD-based parameters, and these affect only the L1 contributions from
+        that single CCD; all the L1 contributions from the other CCDs are
+        constant, so they don't need to be recompute each time.  This yields at
+        least a 10x speedup.
+
+        The caching is done via the built-in @lru_cache decorator, which keeps
+        a dict of args->results.  The args therefore must be hashable. Numpy
+        arrays are not hashable. But it turns out that all the arrays we pass
+        around are constant for the duration of the minimize() call. So we need
+        only *refer* to any arrays that are used, using an id (here, the index
+        "i"); that way, the @lru_cache dictionary will correctly record which
+        arrays are used as inputs.
+
+        Similarly, if a function depends on the value of the distorted
+        reference coordinates, (g_u_ref_dist, g_v_ref_dist), then we include
+        (c1,c3,c5) in the args to indicate that the function's results depend
+        upon those values.  It's a bit sneaky.
+
+        We need to set the following "global" (g_*) variables:
+        '''
+        g_u_ref = None
+        g_v_ref = None
+        g_p_xfit = None
+        g_p_yfit = None
+        g_wcs_initial = None
+        g_u_center = None
+        g_v_center = None
+        g_chip_inds = None
+        g_u_ref_dist = None
+        g_v_ref_dist = None
+
+        @lru_cache
+        def cache_distort_uv_ref(c1, c3, c5):
+            # Apply radial distortion
+            u,v = g_u_ref, g_v_ref
+            r_ref = np.hypot(u, v)
+            r_dist = distort_r(c1, c3, c5, r_ref)
+            u_ref_dist = u * r_dist / r_ref
+            v_ref_dist = v * r_dist / r_ref
+            return u_ref_dist, v_ref_dist
+
+        @lru_cache(maxsize=256)
+        def cache_ccd_uv(i, shear):
+            x,y = g_p_xfit[g_chip_inds[i]] + 1., g_p_yfit[g_chip_inds[i]] + 1.
+            shear = np.array(shear)
+            wcs = g_wcs_initial[i]
+            mywcs = Tan(wcs)
+            shear_wcs(mywcs, shear)
+            # Pixels to IWC (only depends on CRPIX, CD)
+            u,v = mywcs.pixelxy2iwc(x, y)
+            return u, v
+
+        @lru_cache(maxsize=256)
+        def cache_ccd_l1(c1,c3,c5, i, u0, v0, shear):
+            u,v = cache_ccd_uv(i, shear)
+            I = g_chip_inds[i]
+            l1_total = np.sum(np.abs(u + u0 - g_u_ref_dist[I]) +
+                              np.abs(v + v0 - g_v_ref_dist[I]))
+            return l1_total
+
+        def caching_l1_dist_full(params):
+            # Declare that we want to _set_ these variables outside this
+            # nested-function scope
+            nonlocal g_u_ref_dist
+            nonlocal g_v_ref_dist
+
+            c1,c3,c5 = params[:3]
+            params = params[3:]
+            u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+            params = params[2*Nccd:]
+            cd_shears = params
+            u_ref_dist, v_ref_dist = cache_distort_uv_ref(c1, c3, c5)
+            # set "globals"
+            g_u_ref_dist = u_ref_dist
+            g_v_ref_dist = v_ref_dist
+            l1_total = 0.
+            for i,(wcs,I) in enumerate(zip(g_wcs_initial, g_chip_inds)):
+                s = cd_shears[i*4:(i+1)*4]
+                l1_total += cache_ccd_l1(c1, c3, c5, i,
+                                         u_offs[i] + g_u_center[i],
+                                         v_offs[i] + g_v_center[i],
+                                         tuple(s))
+            return l1_total
+        
+        # Fit u,v offsets and shears for CCDs one at a time
+        fit_u, fit_v, fit_shear = [],[],[]
+        for i,(wcs,I) in enumerate(zip(wcs_initial, chip_inds)):
+            vc = minimize(l1_dist_ccd, np.zeros(6),
+                          args=(u_ref[I], v_ref[I], wcs, u_center[i], v_center[i],
+                                P.x_fit[I]+1, P.y_fit[I]+1))
+            #print(vc)
+            vc = vc.x
+            fit_u.append(vc[0])
+            fit_v.append(vc[1])
+            fit_shear.append(vc[2:])
+
+        p0 = np.zeros(3 + Nccd*6)
+        du0,dv0 = get_dudv(p0)
+        print('Median astrometric error before fitting: %.3g pix' %
+              (np.median(np.hypot(du0, dv0) * 3600 / 0.185)))
+
+        p1 = np.hstack([0.,0.,0.] + fit_u + fit_v + fit_shear)
+        du1,dv1 = get_dudv(p1)
+        print('Median astrometric error after CCD fitting: %.3g pix' %
+              (np.median(np.hypot(du1, dv1) * 3600 / 0.185)))
+
+        # Full minimization starting from p1
+        #print('Full fit...')
+        #p2 = minimize(l1_dist_full, p1, args=(u_ref, v_ref, P, chip_inds,
+        #         u_center, v_center, wcs_initial))
+
+        print('Full fit (caching version)...')
+        # set "globals" for the cache
+        g_u_ref = u_ref
+        g_v_ref = v_ref
+        g_wcs_initial = wcs_initial
+        g_u_center = u_center
+        g_v_center = v_center
+        g_p_xfit = P.x_fit
+        g_p_yfit = P.y_fit
+        g_chip_inds = chip_inds
+
+        t0 = time.monotonic()
+        p2 = minimize(caching_l1_dist_full, p1)
+        t1 = time.monotonic()
+        print('Fit took %.3f sec' % (t1-t0))
+        # print(p2)
+        # print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
+        # print('cache_ccd_uv:', cache_ccd_uv.cache_info())
+        # print('cache_ccd_l1:', cache_ccd_l1.cache_info())
+        cache_distort_uv_ref.cache_clear()
+        cache_ccd_uv.cache_clear()
+        cache_ccd_l1.cache_clear()
+        print('Radial polynomial:', p2.x[:3])
+
+        du2,dv2 = get_dudv(p2.x)
+        print('Median astrometric error: %.3g pix' % (np.median(np.hypot(du2, dv2) * 3600 / 0.185)))
+
+        # Trim off outliers and repeat
+        h = np.hypot(du2, dv2)
+        mx = np.percentile(h, 95)
+        Iclip = np.flatnonzero(h < mx)
+        Psub = P[Iclip]
+        print('Cutting to %i of %i stars' % (len(Psub), len(P)))
+        chip_inds_sub = [np.flatnonzero(Psub.ccdname == 'CCD%02i'%i) for i in range(Nccd)]
+        print('Second-round full fit:')
+        g_u_ref = u_ref[Iclip]
+        g_v_ref = v_ref[Iclip]
+        g_wcs_initial = wcs_initial
+        g_u_center = u_center
+        g_v_center = v_center
+        g_p_xfit = Psub.x_fit
+        g_p_yfit = Psub.y_fit
+        g_chip_inds = chip_inds_sub
+
+        #p3 = minimize(l1_dist_full, p2.x, args=(u_ref[Iclip], v_ref[Iclip], Psub, chip_inds_sub, u_center, v_center, wcs_initial))
+        t0 = time.monotonic()
+        p3 = minimize(caching_l1_dist_full, p2.x)
+        t1 = time.monotonic()
+        print('Fit took %.3f sec' % (t1-t0))
+        # print(p3)
+        # print('cache_distort_uv:', cache_distort_uv_ref.cache_info())
+        # print('cache_ccd_uv:', cache_ccd_uv.cache_info())
+        # print('cache_ccd_l1:', cache_ccd_l1.cache_info())
+        cache_distort_uv_ref.cache_clear()
+        cache_ccd_uv.cache_clear()
+        cache_ccd_l1.cache_clear()
+
+        du3,dv3 = get_dudv(p3.x)
+        print('Median astrometric error: %.3g pix' % (np.median(np.hypot(du3, dv3) * 3600 / 0.185)))
+
+        # Unpack params
+        params = p3.x
+        c1,c3,c5 = params[:3]
+        params = params[3:]
+        u_offs, v_offs = params[:Nccd], params[Nccd:2*Nccd]
+        params = params[2*Nccd:]
+        cd_shears = params
+        assert(len(cd_shears) == 4 * Nccd)
+
+        '''
+        Now we're going to take the fitted values and convert them to SIP.
+
+        The reference point CRVAL is the original (u_center, v_center) +
+        (u_offset, v_offset), but pushed through the inverse-distortion
+        function.
+
+        For the SIP distortion terms, we take a grid in image space, push it
+        through the sheared CD and u,v offset to get to distorted u,v coords,
+        use the inverse-distortion function to get undistorted u,v, then the
+        projection matrix to go from IWC to RA,Dec -- we then fit SIP
+        coefficients for that grid of points.
+        '''
+
+        # approx size of CFHT focal plane
+        rr = np.linspace(0, 0.75, 500)
+        rr_dist = distort_r(c1, c3, c5, rr)
+        # fit inverse radial distortion function as a spline
+        undistort_r = CubicSpline(rr_dist, rr)
+
+        def undistort_uv(u, v):
+            r_dist = np.hypot(u, v)
+            r_undist = undistort_r(r_dist)
+            u = u * r_undist / r_dist
+            v = v * r_undist / r_dist
+            return u,v
+
+        # Create pixel grid
+        H,W = wcs_initial[0].shape
+        xgrid,ygrid = np.meshgrid(np.linspace(1, W, 11), np.linspace(1, H, 21))
+        xgrid = xgrid.ravel()
+        ygrid = ygrid.ravel()
+
+        for hdu in hdus:
+            I = chip_inds_sub[hdu]
+            wcs = wcs_initial[hdu]
+            u0 = u_offs[hdu] + u_center[hdu]
+            v0 = v_offs[hdu] + v_center[hdu]
+            myshear = cd_shears[hdu*4:(hdu+1)*4]
+
+            mywcs = Tan(wcs)
+            shear_wcs(mywcs, myshear)
+            # set CRVAL to the undistorted u,v center + offset
+            u,v = undistort_uv(u0, v0)
+            ra0,dec0 = proj.iwc2radec(u, v)
+            mywcs.crval = ra0, dec0
+
+            # Convert the pixel grid to RA,Dec via u,v
+            u,v = ccd_uv(wcs, u0, v0, myshear, xgrid, ygrid)
+            u,v = undistort_uv(u, v)
+            # (proj.iwc2radec uses the boresight CRVAL)
+            ra_grid,dec_grid = proj.iwc2radec(u, v)
+
+            # Massage inputs for fit_sip_wcs_py...
+            xyz_grid = radectoxyz(ra_grid, dec_grid)
+            xy_grid = np.vstack((xgrid, ygrid)).T
+            mysip = fit_sip_wcs_py(xyz_grid, xy_grid, None, mywcs, 5, 6)
+
+            # Write out SIP header.
+            outfn = self.wcs_final_fn.replace('.wcs', 'o%02i.wcs' % hdu)
+            hdr = fitsio.FITSHDR()
+            hdr['EXPNUM'] = self.expnum
+            hdr['CCDNAME'] = 'CCD%02i' % hdu
+            mysip.add_to_header(hdr)
+            outdir = os.path.dirname(outfn)
+            if not os.path.exists(outdir):
+                os.makedirs(outdir, exist_ok=True)
+            fitsio.write(outfn, None, header=hdr, clobber=True)
+            # print('Wrote', outfn)
+
+            # Check that it works for our fitted X,Y coords and Gaia reference RA,Decs!
+            rsip,dsip = mysip.pixelxy2radec(Psub.x_fit[I] + 1., Psub.y_fit[I] + 1.)
+            dists = np.array([arcsec_between(*args) for args in
+                              zip(rsip, dsip, Psub.ra_now[I], Psub.dec_now[I])])
+            print('CCD%02i SIP median scatter: %.1f mas' % (hdu, 1000. * np.median(dists)))

@@ -141,6 +141,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                constant_invvar=False,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
+               expnums=None,
                gaia_stars=True,
                mp=None,
                record_event=None,
@@ -196,7 +197,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                          command_line, brick, targetrd)
 
     # Find CCDs to read
-    ccds = get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd)
+    ccds = get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd, expnums)
 
     # Create Image objects for each CCD
     ims = []
@@ -435,7 +436,7 @@ def get_runbrick_header(program_name, survey, release, gitver,
             name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
     return version_header
 
-def get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd):
+def get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd, expnums):
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
@@ -464,6 +465,9 @@ def get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd):
     if max_mjd is not None:
         ccds.cut(ccds.mjd_obs <= max_mjd)
         debug('Cut to', len(ccds), 'before MJD', max_mjd)
+    if expnums is not None:
+        ccds.cut(np.isin(ccds.expnum, expnums))
+        debug('Cut to', len(ccds), 'in list of allowed expnums')
     return ccds
 
 def _add_stage_version(version_header, short, stagename):
@@ -4439,6 +4443,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               fit_on_coadds=False,
               coadd_tiers=None,
               min_mjd=None, max_mjd=None,
+              expnums=None,
               unwise_coadds=True,
               bail_out=False,
               do_segmentation=True,
@@ -4676,6 +4681,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if nsatur is None:
         nsatur = 1
 
+    if expnums is not None:
+        expnums = [int(s,10) for s in expnums.split(',')]
+
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
                   forced_bands=forced_bands,
                   saddle_min=saddle_min,
@@ -4699,6 +4707,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   less_masking=less_masking,
                   sub_blobs=sub_blobs,
                   min_mjd=min_mjd, max_mjd=max_mjd,
+                  expnums=expnums,
                   coadd_tiers=coadd_tiers,
                   nsatur=nsatur,
                   reoptimize=reoptimize,
@@ -5240,6 +5249,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Only keep images taken after the given MJD')
     parser.add_argument('--max-mjd', type=float,
                         help='Only keep images taken before the given MJD')
+    parser.add_argument('--expnums', type=str,
+                        help='Only keep the given comma-separated list of exposure numbers')
 
     parser.add_argument('--no-splinesky', dest='splinesky', default=True,
                         action='store_false', help='Use constant sky rather than spline.')

@@ -16,24 +16,12 @@ def annotate(ccds, survey, camera, mp=None, normalizePsf=True, carryOn=True):
         (ccd, survey, normalizePsf, carryOn) for ccd in ccds])
 
     # File from the "observing" svn repo:
-    from pkg_resources import resource_filename
-
-    if camera == 'mosaic':
-        tilefile = resource_filename('legacyzpts', 'data/mosaic-tiles_obstatus.fits')
-    elif camera == '90prime':
-        tilefile = None
-    elif camera == 'decam':
-        tilefile = resource_filename('legacyzpts', 'data/decam-tiles_obstatus.fits')
-    else:
-        tilefile = None
-
-    if tilefile is not None:
-        if os.path.isfile(tilefile):
+    if camera in ['mosaic', 'decam']:
+        from importlib import resources
+        ref = resources.files('legacyzpts').joinpath('data', camera + '-tiles_obstatus.fits')
+        with resources.as_file(ref) as fn:
             print('Reading {}'.format(tilefile))
             tiles = fits_table(tilefile)
-        else:
-            print('Required tile file {} not found!'.format(tilefile))
-            raise IOError
     else:
         tiles = None
 
@@ -144,7 +132,7 @@ def annotate_one_ccd(X):
     try:
         tim = im.get_tractor_image(**kwargs)
     except:
-        print('Failed to get_tractor_image')
+        print('Failed to get_tractor_image - exception:')
         import traceback
         traceback.print_exc()
         if carryOn:

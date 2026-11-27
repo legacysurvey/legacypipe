@@ -10,6 +10,7 @@ import sys
 
 import numpy as np
 from scipy.stats import sigmaclip
+from scipy.optimize import minimize
 
 import fitsio
 from astropy.table import Table, vstack
@@ -17,7 +18,9 @@ from astropy.table import Table, vstack
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.util import Sip
 from astrometry.libkd.spherematch import match_radec
+from astrometry.util.starutil_numpy import arcsec_between
 
 import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
@@ -34,7 +37,8 @@ def debug(*args):
 
 
 CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam',
-         'lsstcomcam', 'comcam', 'lsstcam', 'lsstcoadd', 'nisp', 'vis', 'quicklook']
+         'lsstcomcam', 'comcam', 'lsstcam', 'lsstcoadd', 'nisp', 'vis', 'quicklook',
+         'quicklook2']
 
 def ptime(text,t0):
     tnow=Time()
@@ -61,14 +65,14 @@ def _ccds_table(camera='decam', overrides=None):
     https://github.com/legacysurvey/legacyzpts/blob/master/DESCRIPTION_OF_OUTPUTS.md
     '''
     max_camera_length = max([len(c) for c in CAMERAS])
-    if max_camera_length > 9:
+    if max_camera_length > 10:
         print('Warning! Increase camera length header card to S{}'.format(max_camera_length))
 
     cols = [
         ('err_message', 'S30'),
         ('image_filename', 'S150'),
         ('image_hdu', 'i2'),
-        ('camera', 'S9'),
+        ('camera', 'S10'),
         ('expnum', 'i8'),
         ('plver', 'S8'),
         ('procdate', 'S19'),
@@ -97,31 +101,32 @@ def _ccds_table(camera='decam', overrides=None):
         ('cd2_1', 'f4'),
         ('cd2_2', 'f4'),
         ('pixscale', 'f4'),
-        ('zptavg', 'f4'),
+        ('zpt', 'f4'),
         ('yshift', 'bool'),
         # -- CCD-level quantities --
         ('ra', 'f8'),
         ('dec', 'f8'),
-        ('skysb', 'f4'),
-        ('skycounts', 'f4'),
+        ('ccdskysb', 'f4'),
+        ('ccdskycounts', 'f4'),
         ('skyrms', 'f4'),
         ('sig1', 'f4'),
-        ('nstars_photom', 'i2'),
-        ('nstars_photom_used', 'i2'),
-        ('nstars_astrom', 'i2'),
+        ('ccdnphotom', 'i2'),
+        ('ccdnphotom_used', 'i2'),
+        ('ccdnastrom', 'i2'),
         ('phoff', 'f4'),
+        ('ccdphrms', 'f4'),
         ('phrms', 'f4'),
-        ('phrmsavg', 'f4'),
-        ('zpt', 'f4'),
-        ('raoff',  'f4'),
-        ('decoff', 'f4'),
-        ('rarms',  'f4'),
-        ('decrms', 'f4'),
-        ('rarmeds',  'f4'),
-        ('decrmeds', 'f4'),
+        ('ccdzpt', 'f4'),
+        ('ccdraoff',  'f4'),
+        ('ccddecoff', 'f4'),
+        ('ccdshear', '4f4'),
+        ('ccdrarms',  'f4'),
+        ('ccddecrms', 'f4'),
+        ('ccdrarmeds',  'f4'),
+        ('ccddecrmeds', 'f4'),
         ('rastddev',  'f4'),
         ('decstddev', 'f4'),
-        ('bprp', 'f4'),
+        ('ccdbprp', 'f4'),
         ]
 
     if overrides is not None:
@@ -153,41 +158,22 @@ def _stars_table(nstars=1):
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
-def cols_for_survey_table():
-    """Return list of -survey.fits table colums
-    """
-    return ['airmass', 'ha', 'ccdskysb', 'plver', 'procdate', 'plprocid',
-     'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
-     'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
-     'filter', 'exptime', 'camera', 'width', 'height', 'propid',
-     'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff',
-     'ccdrarms', 'ccddecrms', 'ccdrarmeds', 'ccddecrmeds', 'ccdbprp',
-     'ccdskycounts', 'phrms', 'ccdphrms',
-     'cd1_1', 'cd2_2', 'cd1_2', 'cd2_1', 'crval1', 'crval2', 'crpix1',
-     'crpix2', 'skyrms', 'sig1', 'yshift']
-
 def prep_survey_table(T, camera=None, bad_expid=None):
     assert(camera in CAMERAS)
-    need_keys = cols_for_survey_table()
-    # Rename
-    rename_keys= [('zpt','ccdzpt'),
-                  ('zptavg','zpt'),
-                  ('raoff','ccdraoff'),
-                  ('decoff','ccddecoff'),
-                  ('skycounts', 'ccdskycounts'),
-                  ('skysb', 'ccdskysb'),
-                  ('rarms',  'ccdrarms'),
-                  ('decrms', 'ccddecrms'),
-                  ('rarmeds',  'ccdrarmeds'),
-                  ('decrmeds', 'ccddecrmeds'),
-                  ('bprp', 'ccdbprp'),
-                  ('phrms', 'ccdphrms'),
-                  ('phrmsavg', 'phrms'),
-                  ('nstars_astrom','ccdnastrom'),
-                  ('nstars_photom','ccdnphotom'),
-                  ('nstars_photom_used','ccdnphotom_used')]
-    for old,new in rename_keys:
-        T.rename(old,new)
+
+    ## List of columns for the survey-ccds table.
+    need_keys = [
+        'airmass', 'ha', 'ccdskysb', 'plver', 'procdate', 'plprocid',
+        'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
+        'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
+        'filter', 'exptime', 'camera', 'width', 'height', 'propid',
+        'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff', 'ccdshear',
+        'ccdrarms', 'ccddecrms', 'ccdrarmeds', 'ccddecrmeds', 'ccdbprp',
+        'ccdskycounts', 'phrms', 'ccdphrms',
+        'cd1_1', 'cd2_2', 'cd1_2', 'cd2_1', 'crval1', 'crval2', 'crpix1',
+        'crpix2', 'skyrms', 'sig1', 'yshift',
+    ]
+
     # Delete
     del_keys= list( set(T.get_columns()).difference(set(need_keys)) )
     for key in del_keys:
@@ -253,7 +239,7 @@ def measure_image(img_fn, mp, image_dir='images',
         ccds = _ccds_table(camera)
         ccds['image_filename'] = img_fn
         ccds['err_message'] = 'Failed CP calib, or Exptime=0'
-        ccds['zpt'] = 0.
+        ccds['ccdzpt'] = 0.
         set_ccd_metadata(ccds, img, primhdr, None)
         return ccds, None, img
 
@@ -359,8 +345,8 @@ def measure_image(img_fn, mp, image_dir='images',
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
-        for img in imgs:
-            fn = survey.find_file('sky-single', img=img, use_cache=False)
+        for im in imgs:
+            fn = survey.find_file('sky-single', img=im, use_cache=False)
             if fn == skyfn:
                 continue
             if os.path.isfile(fn):
@@ -378,8 +364,8 @@ def measure_image(img_fn, mp, image_dir='images',
                 raise RuntimeError('Merged psfex file did not validate!')
             # At this point the merged file exists and has been validated, so remove
             # the individual PSFEx and SE files.
-            for img in imgs:
-                fn = survey.find_file('psf-single', img=img, use_cache=False)
+            for im in imgs:
+                fn = survey.find_file('psf-single', img=im, use_cache=False)
                 if fn == psffn:
                     continue
                 if os.path.isfile(fn):
@@ -428,14 +414,14 @@ def measure_image(img_fn, mp, image_dir='images',
     else:
         all_photom = None
 
-    zpts = all_ccds['zpt']
+    zpts = all_ccds['ccdzpt']
     zptgood = np.isfinite(zpts)
     if np.sum(zptgood) > 0:
-        all_ccds['zptavg'] = np.median(zpts[zptgood])
-    phrms = all_ccds['phrms']
-    phrmsgood = np.isfinite(phrms) & (all_ccds['phrms'] > 0)
+        all_ccds['zpt'] = np.median(zpts[zptgood])
+    phrms = all_ccds['ccdphrms']
+    phrmsgood = np.isfinite(phrms) & (all_ccds['ccdphrms'] > 0)
     if np.sum(phrmsgood) > 0:
-        all_ccds['phrmsavg'] = np.median(phrms[phrmsgood])
+        all_ccds['phrms'] = np.median(phrms[phrmsgood])
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_photom, img
@@ -525,7 +511,8 @@ def run_one_ext(X):
                           gaia_photom=gaia_photom, ps=ps)
 
 class outputFns(object):
-    def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False):
+    def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False,
+                 first_round=False):
         """
         Assigns filename, makes needed dirs.
 
@@ -565,8 +552,11 @@ class outputFns(object):
                 base = base[:-len(suff)]
         if debug:
             base += '-debug'
-        self.photomfn = os.path.join(basedir, base + '-photom.fits')
-        self.annfn = os.path.join(basedir, base + '-annotated.fits')
+        infix = ''
+        if first_round:
+            infix = '-round1'
+        self.photomfn = os.path.join(basedir, base + '-photom' + infix + '.fits')
+        self.annfn = os.path.join(basedir, base + '-annotated' + infix + '.fits')
 
 def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     tempfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
@@ -630,9 +620,9 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     if np.isfinite(v):
         hdr.add_record(dict(name='DEC_BORE', value=v, comment='Boresight Dec (deg)'))
 
-    zptgood = np.isfinite(ccds['zpt'])
+    zptgood = np.isfinite(ccds['ccdzpt'])
     if np.sum(zptgood) > 0:
-        medzpt = np.median(ccds['zpt'][zptgood])
+        medzpt = np.median(ccds['ccdzpt'][zptgood])
     else:
         medzpt = 0.0
     hdr.add_record(dict(name='CCD_ZPT', value=medzpt,
@@ -670,7 +660,7 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
 
     t0 = ptime('write-results-to-fits',t0)
 
-    img.zeropointing_completed(annfn, photomfn, T, photom, hdr)
+    img.zeropointing_completed(annfn, photomfn, T, photom, hdr, **measureargs)
 
 def get_parser():
     '''return parser object, tells it what options to look for
@@ -774,8 +764,6 @@ def main(args=None):
     # image_list -- iterable list of image filenames
     # args -- parsed argparser objection from get_parser()
 
-    from pkg_resources import resource_filename
-
     assert(not args is None)
     assert(not image_list is None)
     t0 = tbegin = Time()
@@ -828,8 +816,9 @@ def main(args=None):
                       debug=measureargs['debug'])
 
         img = survey.get_image_object(None, camera=measureargs['camera'],
-                                      image_fn=F.imgfn, image_hdu=None,
+                                      image_fn=imgfn, image_hdu=None,
                                       prime_cache=False, check_cache=False)
+
         if measureargs['run_psf_only']:
             skyfn = None
         else:
@@ -862,9 +851,11 @@ def main(args=None):
             print('Already finished {}'.format(skyfn))
             continue
 
-        phot_ok = validate_version(F.photomfn, 'header', img.expnum, img.plver, img.plprocid,
+        phot_ok = img.validate_version('photom', F.photomfn, 'header', img.expnum, img.plver, img.plprocid,
                                    ext=1, quiet=quiet)
 
+        print('Checking outputs: phot_ok', phot_ok, 'ann_ok', ann_ok, 'psf_ok', psf_ok,
+              'sky_ok', sky_ok)
         if ann_ok and (phot_ok or not(check_photom)) and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
             continue
@@ -900,12 +891,34 @@ def main(args=None):
 
             if camera in ['mosaic', 'decam', '90prime']:
                 from legacyzpts.psfzpt_cuts import read_bad_expid
-                fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
-                if os.path.isfile(fn):
+                from importlib import resources
+                ref = resources.files('legacyzpts').joinpath('data', camera + '-bad_expid.txt')
+                with resources.as_file(ref) as fn:
+                    #if os.path.isfile(fn):
                     print('Reading {}'.format(fn))
                     measureargs.update(bad_expid=read_bad_expid(fn))
-                else:
-                    print('No bad exposure file found for camera {}'.format(camera))
+                    #else:
+                    #print('No bad exposure file found for camera {}'.format(camera))
+
+        if img.needs_two_round_zeropointing():
+            # check for first round photom.fits, annotated.fits outputs, only run second
+            # round if so??
+            F1 = outputFns(imgfn, outdir, camera, image_dir=survey.get_image_dir(),
+                           debug=measureargs['debug'], first_round=True)
+            phot_ok = img.validate_version('photom', F1.photomfn, 'header', img.expnum, img.plver,
+                                       img.plprocid, ext=1, quiet=quiet)
+            ann_ok = img.validate_version('ann', F1.annfn, 'table', img.expnum, img.plver,
+                                          img.plprocid, quiet=quiet)
+            if not (phot_ok and ann_ok):
+                # Run first round
+                print('Running first-round zeropointing!')
+                img.reinitialize(first_round=True)
+                runit(F.imgfn, F1.photomfn, F1.annfn, mp, first_round=True, **measureargs)
+            else:
+                # should we do this??
+                img.zeropointing_completed(F1.annfn, F1.photomfn, None, None, None,
+                                           first_round=True, **measureargs)
+            img.reinitialize(first_round=False)
 
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
 
@@ -916,6 +929,7 @@ def main(args=None):
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
+    mp.close()
 
 def set_ccd_metadata(ccds, img, primhdr, hdr):
     # init_ccd():
@@ -1048,8 +1062,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     print('Sky level: %.2f count/pix' % skymed)
     print('Sky brightness: %.3f mag/arcsec^2 (assuming nominal zeropoint)' % skybr)
     ccds['skyrms'] = skyrms / imobj.exptime
-    ccds['skycounts'] = skymed / imobj.exptime
-    ccds['skysb'] = skybr   # [mag/arcsec^2]
+    ccds['ccdskycounts'] = skymed / imobj.exptime
+    ccds['ccdskysb'] = skybr   # [mag/arcsec^2]
     t0= ptime('measure-sky',t0)
 
     # Does this image already have (photometric and astrometric) zeropoints computed?
@@ -1058,7 +1072,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         print('Image', imobj, ': using zeropoint %.3f' % zpt)
         zpscale = NanoMaggies.zeropointToScale(zpt)
         ccds['sig1'] /= zpscale
-        ccds['zpt'] = zpt
+        ccds['ccdzpt'] = zpt
         return ccds, None
 
     # Load Gaia & photometric calibrator catalogues
@@ -1250,10 +1264,12 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
                         X = np.zeros(len(phot), G.dtype)
                     X[J] = G[I]
                     phot.set(c, X)
-                # unmatched Gaia stars
+                # Keep unmatched Gaia stars
                 unmatched = np.ones(len(gaia), bool)
                 unmatched[I] = False
                 gaia.cut(unmatched)
+                # debug - get predicted mags for Gaia-only stars too
+                gaia.legacy_survey_mag = imobj.photometric_calibrator_to_observed('gaia', gaia)
                 del unmatched
 
             refs.append(phot)
@@ -1356,16 +1372,20 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         plt.imshow(fit_img, interpolation='nearest', origin='lower',
                    vmin=-2.*s1, vmax=10.*s1, cmap='gray')
         ax = plt.axis()
-        ok,x,y = wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
-        Ibright = np.argsort(gaia.phot_g_mean_mag)[:5]
+        cat = refs
+        ok,x,y = wcs.radec2pixelxy(cat.ra_now, cat.dec_now)
+        #Ibright = np.argsort(gaia.phot_g_mean_mag)[:10]
+        #Ibright = np.argsort(gaia.phot_bp_mean_mag + 100.*(gaia.phot_bp_mean_mag == 0))[:10]
+        Ibright = np.argsort(cat.legacy_survey_mag)
         plt.plot(x-1., y-1., 'o', mec='r', mfc='none')
-        plt.plot(x[Ibright]-1., y[Ibright]-1., 'o', mec='orange', ms=20, mfc='none')
+        I = Ibright[:10]
+        plt.plot(x[I]-1., y[I]-1., 'o', mec='orange', ms=20, mfc='none')
         plt.axis(ax)
-        plt.title('Before fitting Gaia sources')
+        plt.title('Before fitting Gaia/ref sources')
         ps.savefig()
 
-        Ibright = np.argsort(gaia.phot_g_mean_mag)
-        print('Brightest Gaia G:', gaia.phot_g_mean_mag[Ibright[:10]])
+        #Ibright = np.argsort(gaia.phot_g_mean_mag)
+        #print('Brightest Gaia G:', gaia.phot_g_mean_mag[Ibright[:10]])
         #bright_gaia_sourceid = gaia.gaia_sourceid
         plot_gaia_sourceid = []
         plt.clf()
@@ -1379,7 +1399,11 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
             if xc < s or yc < s or xc+s >= w or yc+s >= h:
                 # too close to edge
                 continue
-            plot_gaia_sourceid.append(gaia.gaia_sourceid[i])
+            sid = cat.gaia_sourceid[i]
+            if sid == 0:
+                # PS1-not-Gaia source
+                continue
+            plot_gaia_sourceid.append(sid)
             plt.subplot(R,C,k)
             k+=1
             plt.imshow(fit_img[yc-s:yc+s+1, xc-s:xc+s+1], interpolation='nearest', origin='lower',
@@ -1463,8 +1487,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         ps.savefig()
 
         # Cross-correlation (matching) between detected sources and Gaia sources
-        ok,gx,gy = wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
-        I = np.argsort(gaia.phot_g_mean_mag)
+        ok,gx,gy = wcs.radec2pixelxy(cat.ra_now, cat.dec_now)
+        #I = np.argsort(gaia.phot_g_mean_mag)
+        I = np.argsort(cat.legacy_survey_mag)
         gx = gx[I[:1000]] - 1.
         gy = gy[I[:1000]] - 1.
 
@@ -1545,21 +1570,47 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         plt.suptitle('Fitted models')
         ps.savefig()
 
-        
-    phot.raoff  = (refs.ra_now  - phot.ra_fit ) * 3600. * np.cos(np.deg2rad(refs.dec_now))
-    phot.decoff = (refs.dec_now - phot.dec_fit) * 3600.
+    fit_type = imobj.cd_transform_type()
+    if fit_type == 'rotate':
+        print('cd_transform_type = "rotate" - not implemented!')
+        assert(False)
+    elif fit_type == 'shear':
+        # fit on only the "refs.astrom" subset...
+        S = minimize(cd_shear_distance, np.array([0., 0., 0., 0.]), #np.array([1., 0., 0., 1.]),
+                     args=(wcs, x0, y0, phot[refs.astrom], refs[refs.astrom]))
+        print(S)
+        S = S.x
+        # the optimizer fits on values near zero - add the identity matrix here
+        S = S * 1e3 + np.array([1., 0., 0., 1.])
+        ccds['ccdshear'] = S
+        print('CD matrix shear: [%.6f, %.6f, %.6f, %.6f]' % (S[0],S[1],S[2],S[3]))
+
+        ra,dec = cd_shear_radec(S, wcs, x0, y0, phot)
+        phot.ra_fit  = ra
+        phot.dec_fit = dec
+
+    # Remove delta ra,dec (based on the "astrom" subset)
+    raoff, decoff = radec_offset(refs.ra_now[refs.astrom], refs.dec_now[refs.astrom],
+                                 phot.ra_fit[refs.astrom], phot.dec_fit[refs.astrom])
+
+    # Apply that correction to ra_fit, dec_fit
+    phot.ra_fit  += raoff
+    phot.dec_fit += decoff
+
+    phot.raoff  = (3600. * wrap_delta_ra(refs.ra_now, phot.ra_fit) *
+        np.cos(np.deg2rad(refs.dec_now)))
+    phot.decoff = 3600. * (refs.dec_now - phot.dec_fit)
 
     dra  = phot.raoff [refs.astrom]
     ddec = phot.decoff[refs.astrom]
-
-    raoff  = np.median(dra)
-    decoff = np.median(ddec)
     rastd  = np.std(dra)
     decstd = np.std(ddec)
     ra_clip, _, _ = sigmaclip(dra, low=3., high=3.)
     rarms = getrms(ra_clip)
     dec_clip, _, _ = sigmaclip(ddec, low=3., high=3.)
     decrms = getrms(dec_clip)
+    rarmeds  = np.sqrt(np.median(dra **2))
+    decrmeds = np.sqrt(np.median(ddec**2))
 
     bp = refs.phot_bp_mean_mag[refs.astrom]
     rp = refs.phot_rp_mean_mag[refs.astrom]
@@ -1568,9 +1619,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     avg_color = np.median(bprp)
     print('Median Gaia BP-RP mag of astrometric calibrators (%i/%i good): %.3f' %
           (len(bprp), len(ok), avg_color))
-
-    rarmeds = np.sqrt(np.median(dra**2))
-    decrmeds = np.sqrt(np.median(ddec**2))
 
     # For astrom, since we have Gaia everywhere, count the number
     # that pass the sigma-clip, ie, the number of stars that
@@ -1644,6 +1692,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         kept[:] = False
         nphotom_used = 0
 
+    # reduce to float32
     for c in ['x_ref','y_ref','x_fit','y_fit','flux','raoff','decoff', 'psfmag',
               'dflux','dx','dy']:
         phot.set(c, phot.get(c).astype(np.float32))
@@ -1684,21 +1733,21 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
                  apphot.field('aperture_sum_err').data.astype(np.float32))
 
     # Add to the zeropoints table
-    ccds['raoff']  = raoff
-    ccds['decoff'] = decoff
+    ccds['ccdraoff']  = raoff
+    ccds['ccddecoff'] = decoff
     ccds['rastddev']  = rastd
     ccds['decstddev'] = decstd
-    ccds['rarms']  = rarms
-    ccds['decrms'] = decrms
-    ccds['rarmeds'] = rarmeds
-    ccds['decrmeds'] = decrmeds
-    ccds['bprp'] = avg_color
+    ccds['ccdrarms']  = rarms
+    ccds['ccddecrms'] = decrms
+    ccds['ccdrarmeds'] = rarmeds
+    ccds['ccddecrmeds'] = decrmeds
+    ccds['ccdbprp'] = avg_color
     ccds['phoff'] = dzpt
-    ccds['phrms'] = zptstd
-    ccds['zpt'] = zptmed
-    ccds['nstars_photom'] = nphotom
-    ccds['nstars_astrom'] = nastrom
-    ccds['nstars_photom_used'] = nphotom_used
+    ccds['ccdphrms'] = zptstd
+    ccds['ccdzpt'] = zptmed
+    ccds['ccdnphotom'] = nphotom
+    ccds['ccdnastrom'] = nastrom
+    ccds['ccdnphotom_used'] = nphotom_used
     # .ra,.dec = Gaia else PS1
     phot.ra  = phot.ra_gaia
     phot.dec = phot.dec_gaia
@@ -1730,10 +1779,54 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     # Plots for comparing to Arjuns zeropoints*.ps
     verboseplots = False
     if verboseplots:
-        imobj.make_plots(phot,dmag,ccds['zpt'],transp)
+        imobj.make_plots(phot,dmag,ccds['ccdzpt'],transp)
         t0= ptime('made-plots',t0)
     return ccds, phot
 
+# for fitting the CD matrix transformation
+#def cd_rotate_radec(theta, )
+
+def cd_shear_radec(S, wcs, x0, y0, phot):
+    # here we're assuming that "wcs" is a Sip object...
+    mywcs = Sip(wcs)
+
+    cd0 = mywcs.wcstan.cd.copy()
+
+    cd = np.array(mywcs.wcstan.cd).reshape((2,2))
+    cd = S.reshape((2,2)) @ cd
+    mywcs.wcstan.cd = cd.ravel()
+
+    cd1 = mywcs.wcstan.cd.copy()
+    #print('CD', cd0, 'S * CD', cd1)
+    ra,dec = mywcs.pixelxy2radec(phot.x_fit - x0 + 1, phot.y_fit - y0 + 1)
+    return ra,dec
+
+def wrap_delta_ra(r1, r2):
+    dra = r1 - r2
+    # handle RA wrap
+    dra += -360*(dra >  180)
+    dra += +360*(dra < -180)
+    return dra
+
+def radec_offset(r1, d1, r2, d2):
+    # Remove a shift
+    dra = wrap_delta_ra(r1, r2)
+    dra  = np.median(dra)
+    ddec = np.median(d1 - d2)
+    return dra,ddec
+
+def cd_shear_distance(S, wcs, x0, y0, phot, refs):
+    # the optimizer fits on values near zero - add the identity matrix here
+    S = S * 1e3 + np.array([1., 0., 0., 1.])
+    #print('S', S)
+    ra,dec = cd_shear_radec(S, wcs, x0, y0, phot)
+    dra,ddec = radec_offset(refs.ra_now, refs.dec_now, ra, dec)
+    dists = np.array([arcsec_between(r1,d1,r2,d2) for r1,d1,r2,d2 in
+                      zip(ra + dra, dec + ddec, refs.ra_now, refs.dec_now)])
+    return np.median(dists)
+
+## we're passed in a subimage -- starting at (ccd_x0, ccd_y0).
+## the "wcs" applies to the subimage.
 def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
                         psf, ccd_x0, ccd_y0, Rfit=10, ps=None):
     import tractor

@@ -49,7 +49,9 @@ class LegacySurveyImage(object):
                  camera_setup=False):
         '''
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
-        and one row of a CCDs fits_table object.
+        and one row of a CCDs fits_table object;
+        OR,
+        from a filename and HDU.
 
         You may not need to instantiate this class directly, instead using
         survey.get_image_object():
@@ -71,6 +73,16 @@ class LegacySurveyImage(object):
 
         Perhaps the most important method in this class is
         *get_tractor_image*.
+
+        legacy_zeropoints.py calls the constructor (via survey.get_image_object) with
+        args:
+            LegacySurveyImage(None, camera=camera, image_fn=image_fn, image_hdu=None)
+        in order to find calib files (sky, psf, etc),
+        and validate calib files.
+        Then it calls get_extension_list()
+
+        Then LegacySurveyImage() gets called again for each HDU, with
+        image_fn and image_hdu passed in.
 
         '''
         super().__init__()
@@ -197,6 +209,9 @@ class LegacySurveyImage(object):
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
 
+    def needs_two_round_zeropointing(self):
+        return False
+
     def set_calib_filenames(self):
         # Calib filenames
         calibdir = self.survey.get_calib_dir()
@@ -220,6 +235,12 @@ class LegacySurveyImage(object):
 
     def set_ccdzpt(self, ccdzpt):
         self.ccdzpt = ccdzpt
+
+    # called from legacy_zeropoints: should we fit a transformation to the image
+    # header WCS's CD matrix?
+    # Options are None, "rotate", "shear"
+    def cd_transform_type(self):
+        return None
 
     # For pickling
     def __getstate__(self):
@@ -546,7 +567,7 @@ class LegacySurveyImage(object):
         '''
         return None
 
-    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr, **kwargs):
         '''
         Called after legacy_zeropoints has just written the "photom" and
         "annotated" files.  (The objects are passed as *ann* and *photom*,
@@ -1164,6 +1185,7 @@ class LegacySurveyImage(object):
         gal = SimpleGalaxy(pos, NanoMaggies(**{band:1.}))
         S = 32
         mm = ModelMask(int(x-S), int(y-S), 2*S+1, 2*S+1)
+        wcs = tim.getWcs()
         galmod = gal.getModelPatch(tim, modelMask=mm).patch
         #galmod = np.maximum(0, galmod)
         #galmod /= galmod.sum()

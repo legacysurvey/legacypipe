@@ -68,6 +68,7 @@ def main(args=None):
             'zpt',
             'ccdraoff',
             'ccddecoff',
+            'ccdshear',
             'ccdskycounts',
             'ccdskysb',
             'ccdrarms',

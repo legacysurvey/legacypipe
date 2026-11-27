@@ -38,9 +38,10 @@ mkdir $TMPCACHE/config
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
 mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+#cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
+cp -r $HOME/.cache/astropy $XDG_CACHE_HOME/astropy
+#mkdir $XDG_CONFIG_HOME/astropy
+#cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
 mkdir $MPLCONFIGDIR
@@ -48,9 +49,9 @@ cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
 
 image="$1"
 
-camera=quicklook
+camera=quicklook2
 
-log=$outdir/logs/$(echo "${image}" | sed s#.flt#.log#g)
+log=$outdir/logs/$(echo "${image}" | sed s#.flt##g).log
 logdir=$(dirname $log)
 mkdir -p $logdir
 
@@ -60,12 +61,14 @@ echo "Logging to $log"
 export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 export PYTHONPATH=$LEGACYPIPE_DIR:${PYTHONPATH}
 
-python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
-	--camera ${camera} \
-    --survey-dir ${LEGACY_SURVEY_DIR} \
-    --outdir ${outdir} \
-    $image \
-    >> "$log" 2>&1
+#       --debug --plots \
+python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
+       --threads 40 \
+	   --camera ${camera} \
+       --survey-dir ${LEGACY_SURVEY_DIR} \
+       --outdir ${outdir} \
+       $image \
+       >> "$log" 2>&1
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!
